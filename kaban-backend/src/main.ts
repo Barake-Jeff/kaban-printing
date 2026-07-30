@@ -21,8 +21,13 @@ async function bootstrap() {
   app.useGlobalInterceptors(new TransformInterceptor());
   app.useGlobalFilters(new GlobalExceptionFilter());
 
+  const allowedOrigins = (config.get('FRONTEND_URL') ?? '')
+    .split(',')
+    .map((origin: string) => origin.trim())
+    .filter(Boolean);
+
   app.enableCors({
-    origin: config.get('FRONTEND_URL'),
+    origin: allowedOrigins,
     credentials: true,
   });
 

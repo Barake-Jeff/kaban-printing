@@ -164,6 +164,14 @@
           </div>
         </div>
 
+        <!-- Word conversion accuracy note -->
+        <div v-if="isWordDoc" class="mt-md flex items-start gap-sm bg-surface-container-low p-md rounded-lg">
+          <span class="material-symbols-outlined text-on-surface-variant text-[20px] flex-shrink-0 mt-0.5">info</span>
+          <p class="font-body-sm text-body-sm text-on-surface-variant font-normal">
+            We convert Word documents to PDF for printing, so spacing or line breaks may shift very slightly. Please check the preview before confirming your order.
+          </p>
+        </div>
+
         <!-- Document preview -->
         <div class="mt-xl relative rounded-lg overflow-hidden bg-surface-container-high aspect-[3/2] flex items-center justify-center">
           <img
@@ -416,6 +424,8 @@ const sideOpts: Array<{ val: SideMode; label: string }> = [
   { val: 'single', label: 'Single' },
   { val: 'double', label: 'Double sided' },
 ]
+
+const isWordDoc = computed(() => /\.docx?$/i.test(form.fileName ?? ''))
 
 const costEstimate = computed(() => {
   const pages      = form.pages || 1

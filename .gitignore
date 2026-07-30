@@ -10,6 +10,10 @@ kaban-backend/dist/
 kaban-backend/.env
 kaban-backend/.uploads/
 
+# Proprietary Microsoft font files (licensed to this machine only — never commit)
+kaban-backend/fonts/msfonts/*
+!kaban-backend/fonts/msfonts/.gitkeep
+
 # Root artifacts
 .nuxt/
 node_modules/
