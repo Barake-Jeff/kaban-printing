@@ -1,5 +1,5 @@
 import {
-  Injectable, OnModuleInit, Logger, NotFoundException, ForbiddenException,
+  Injectable, OnModuleInit, Logger, NotFoundException,
   BadRequestException, InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
@@ -13,6 +13,7 @@ import { tmpdir } from 'os';
 import * as fs from 'fs/promises';
 import { v4 as uuid } from 'uuid';
 import { File } from './models/file.model';
+import { User, UserRole } from '../users/models/user.model';
 
 const execFileAsync = promisify(execFile);
 
@@ -160,10 +161,11 @@ export class FilesService implements OnModuleInit {
     }
   }
 
-  async getPresignedUrl(fileId: string, userId: string) {
+  async getPresignedUrl(fileId: string, user: User) {
     const file = await this.fileModel.findOne({ where: { id: fileId } });
     if (!file) throw new NotFoundException('File not found');
-    if (file.userId !== userId) throw new ForbiddenException('Access denied');
+    const isBypass = user.role === UserRole.ADMIN || user.role === UserRole.CLERK;
+    if (file.userId !== user.id && !isBypass) throw new NotFoundException('File not found');
 
     const key = file.pdfKey ?? file.fileKey;
     const url = await this.publicClient.presignedGetObject(this.bucket, key, 3600);

@@ -6,9 +6,12 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { OwnershipGuard } from '../../common/guards/ownership.guard';
+import { CheckOwnership } from '../../common/decorators/check-ownership.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FilesService } from './files.service';
-import { User } from '../users/models/user.model';
+import { File } from './models/file.model';
+import { User, UserRole } from '../users/models/user.model';
 
 @Controller('files')
 @UseGuards(JwtAuthGuard)
@@ -33,7 +36,9 @@ export class FilesController {
   }
 
   @Get(':fileId')
+  @UseGuards(OwnershipGuard)
+  @CheckOwnership({ model: File, idParam: 'fileId', bypassRoles: [UserRole.ADMIN, UserRole.CLERK] })
   getFileUrl(@Param('fileId') fileId: string, @CurrentUser() user: User) {
-    return this.filesService.getPresignedUrl(fileId, user.id);
+    return this.filesService.getPresignedUrl(fileId, user);
   }
 }
