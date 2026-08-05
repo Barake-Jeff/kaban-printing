@@ -15,48 +15,45 @@
       <h1 class="text-xl font-bold text-primary mb-1">Staff sign in</h1>
       <p class="text-sm text-on-surface-variant mb-8">For PrintEase team members only.</p>
 
-      <form @submit.prevent="handleLogin" class="space-y-5">
+      <!-- --field-accent swaps the shared field's orange focus ring for staff navy -->
+      <form
+        class="space-y-5"
+        style="--field-accent: #021745"
+        novalidate
+        @submit.prevent="handleLogin"
+      >
 
-        <div class="space-y-1">
-          <label class="block text-sm font-semibold text-primary">Phone number</label>
-          <input
-            v-model="form.phone"
-            type="tel"
-            placeholder="0712 345 678"
-            class="input-field"
-            required
-            autocomplete="username"
-          />
-        </div>
+        <CommonTextField
+          v-model="form.phone"
+          label="Phone number"
+          type="tel"
+          placeholder="0712345678"
+          autocomplete="username"
+          inputmode="tel"
+          enterkeyhint="next"
+          autocapitalize="off"
+          label-class="block text-sm font-semibold text-primary"
+        />
 
-        <div class="space-y-1">
-          <label class="block text-sm font-semibold text-primary">Password</label>
-          <div class="relative">
-            <input
-              v-model="form.password"
-              :type="showPass ? 'text' : 'password'"
-              placeholder="••••••••"
-              class="input-field"
-              required
-              autocomplete="current-password"
-            />
-            <button
-              @click="showPass = !showPass"
-              type="button"
-              class="absolute right-3 top-3 text-outline hover:text-primary transition-colors"
-            >
-              <span class="material-symbols-outlined text-xl">{{ showPass ? 'visibility_off' : 'visibility' }}</span>
-            </button>
-          </div>
-        </div>
+        <CommonTextField
+          v-model="form.password"
+          label="Password"
+          placeholder="••••••••"
+          autocomplete="current-password"
+          enterkeyhint="go"
+          revealable
+          label-class="block text-sm font-semibold text-primary"
+        />
 
-        <p v-if="auth.error" class="text-sm text-red-600">{{ auth.error }}</p>
+        <CommonAlertBanner tone="error" :message="auth.error" />
 
         <button
           type="submit"
           :disabled="auth.loading"
-          class="w-full h-12 bg-primary text-on-primary font-semibold uppercase tracking-widest rounded-lg active:scale-[0.98] transition-all flex items-center justify-center disabled:opacity-60"
+          :aria-busy="auth.loading"
+          class="w-full h-12 bg-primary text-on-primary font-semibold uppercase tracking-widest rounded-lg active:scale-[0.98] transition-all flex items-center justify-center gap-sm disabled:opacity-60"
         >
+          <CommonSpinner v-if="auth.loading" size="sm" />
           {{ auth.loading ? 'Signing in…' : 'Sign in' }}
         </button>
       </form>
@@ -77,8 +74,7 @@ definePageMeta({ layout: false })
 const auth   = useAuthStore()
 const router = useRouter()
 
-const form     = reactive({ phone: '', password: '' })
-const showPass = ref(false)
+const form = reactive({ phone: '', password: '' })
 
 // Redirect already-logged-in staff
 onMounted(() => {
@@ -94,22 +90,3 @@ async function handleLogin() {
   }
 }
 </script>
-
-<style scoped>
-.input-field {
-  width: 100%;
-  height: 3rem;
-  padding-left: 16px;
-  padding-right: 44px;
-  background: white;
-  border: 1px solid #c5c6d0;
-  border-radius: 12px;
-  font-size: 16px;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.input-field:focus {
-  border-color: #021745;
-  box-shadow: 0 0 0 1px #021745;
-}
-</style>

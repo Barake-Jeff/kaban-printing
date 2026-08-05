@@ -12,6 +12,7 @@ import { CustomerRegisterDto } from './dto/customer-register.dto';
 import { CustomerLoginDto } from './dto/customer-login.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { normalizeKenyanPhone } from '../../common/utils/phone.util';
 
 @Injectable()
 export class AuthService {
@@ -140,7 +141,9 @@ export class AuthService {
     return crypto.createHash('sha256').update(token).digest('hex');
   }
 
+  // Login DTOs deliberately carry no format rule, so this is the only thing
+  // making "+254712345678" / "254 712 345 678" match a stored "0712345678".
   private normalizePhone(phone: string): string {
-    return phone.replace(/^\+254/, '0').replace(/\s/g, '');
+    return normalizeKenyanPhone(phone) as string;
   }
 }
