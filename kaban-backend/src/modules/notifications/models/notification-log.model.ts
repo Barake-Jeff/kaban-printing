@@ -1,5 +1,5 @@
 import {
-  Table, Column, Model, DataType, ForeignKey, Default,
+  Table, Column, Model, DataType, ForeignKey, Default, Index,
 } from 'sequelize-typescript';
 import { User } from '../../users/models/user.model';
 
@@ -11,9 +11,12 @@ export class NotificationLog extends Model {
   @Column({ type: DataType.STRING(36), allowNull: false, field: 'job_id' })
   jobId: string;
 
+  @Index({ name: 'idx_user_id' })
   @ForeignKey(() => User)
   @Column({ type: DataType.UUID, allowNull: false, field: 'user_id' })
   userId: string;
+
+  
 
   @Column({ type: DataType.ENUM('sms', 'whatsapp', 'push'), allowNull: false })
   channel: 'sms' | 'whatsapp' | 'push';

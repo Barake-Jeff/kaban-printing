@@ -1,9 +1,12 @@
 import { Controller, Post, Get, Param, Body, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { OwnershipGuard } from '../../common/guards/ownership.guard';
+import { CheckOwnership } from '../../common/decorators/check-ownership.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaymentsService } from './payments.service';
 import { InitiateMpesaDto } from './dto/initiate-mpesa.dto';
-import { User } from '../users/models/user.model';
+import { Job } from '../jobs/models/job.model';
+import { User, UserRole } from '../users/models/user.model';
 
 @Controller('payments')
 export class PaymentsController {
@@ -23,8 +26,9 @@ export class PaymentsController {
   }
 
   @Get('status/:jobId')
-  @UseGuards(JwtAuthGuard)
+  @UseGuards(JwtAuthGuard, OwnershipGuard)
+  @CheckOwnership({ model: Job, idParam: 'jobId', bypassRoles: [UserRole.ADMIN, UserRole.CLERK] })
   getStatus(@Param('jobId') jobId: string, @CurrentUser() user: User) {
-    return this.paymentsService.getPaymentStatus(jobId, user.id);
+    return this.paymentsService.getPaymentStatus(jobId, user);
   }
 }

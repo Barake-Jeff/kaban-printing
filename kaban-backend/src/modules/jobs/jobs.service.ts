@@ -1,10 +1,10 @@
 import {
-  Injectable, NotFoundException, ForbiddenException, BadRequestException,
+  Injectable, NotFoundException, BadRequestException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Job, JobStatus, PaymentStatus } from './models/job.model';
 import { File } from '../files/models/file.model';
-import { User } from '../users/models/user.model';
+import { User, UserRole } from '../users/models/user.model';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateJobDto } from './dto/create-job.dto';
 
@@ -101,13 +101,14 @@ export class JobsService {
     };
   }
 
-  async findOne(id: string, userId: string) {
+  async findOne(id: string, user: User) {
     const job = await this.jobModel.findOne({
       where: { id },
       include: [{ model: User, attributes: ['notifSms', 'notifWhatsapp', 'name', 'phone', 'houseNumber'] }],
     });
     if (!job) throw new NotFoundException('Job not found');
-    if (job.userId !== userId) throw new ForbiddenException('Access denied');
+    const isBypass = user.role === UserRole.ADMIN || user.role === UserRole.CLERK;
+    if (job.userId !== user.id && !isBypass) throw new NotFoundException('Job not found');
     return this.formatJob(job, job.user);
   }
 

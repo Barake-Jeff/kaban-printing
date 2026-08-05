@@ -1,5 +1,5 @@
 import {
-  Table, Column, Model, DataType, ForeignKey, BelongsTo, Default, Unique,
+  Table, Column, Model, DataType, ForeignKey, BelongsTo, Default, Unique, Index,
 } from 'sequelize-typescript';
 import { User } from '../../users/models/user.model';
 import { Job } from '../../jobs/models/job.model';
@@ -30,6 +30,7 @@ export class Payment extends Model {
   @BelongsTo(() => Job)
   job: Job;
 
+  @Index({ name: 'idx_user_id' })
   @ForeignKey(() => User)
   @Column({ type: DataType.UUID, allowNull: false, field: 'user_id' })
   userId: string;

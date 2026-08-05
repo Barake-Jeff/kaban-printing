@@ -5,7 +5,7 @@ import { InjectModel } from '@nestjs/sequelize';
 import { v4 as uuid } from 'uuid';
 import { Payment, PaymentRecordStatus, PaymentRecordMethod } from './models/payment.model';
 import { Job, JobStatus, PaymentStatus } from '../jobs/models/job.model';
-import { User } from '../users/models/user.model';
+import { User, UserRole } from '../users/models/user.model';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InitiateMpesaDto } from './dto/initiate-mpesa.dto';
 
@@ -157,8 +157,11 @@ export class PaymentsService {
     }
   }
 
-  async getPaymentStatus(jobId: string, userId: string) {
-    const job = await this.jobModel.findOne({ where: { id: jobId, userId } });
+  async getPaymentStatus(jobId: string, user: User) {
+    const isBypass = user.role === UserRole.ADMIN || user.role === UserRole.CLERK;
+    const job = await this.jobModel.findOne({
+      where: isBypass ? { id: jobId } : { id: jobId, userId: user.id },
+    });
     if (!job) throw new NotFoundException('Job not found');
 
     const payment = await this.paymentModel.findOne({ where: { jobId } });

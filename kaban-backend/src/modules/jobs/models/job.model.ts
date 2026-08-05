@@ -1,5 +1,5 @@
 import {
-  Table, Column, Model, DataType, ForeignKey, BelongsTo, Default,
+  Table, Column, Model, DataType, ForeignKey, BelongsTo, Default, Index,
 } from 'sequelize-typescript';
 import { User } from '../../users/models/user.model';
 import { File } from '../../files/models/file.model';
@@ -27,6 +27,7 @@ export class Job extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })
   id: string;
 
+  @Index({ name: 'idx_user_id' })
   @ForeignKey(() => User)
   @Column({ type: DataType.UUID, allowNull: false, field: 'user_id' })
   userId: string;
