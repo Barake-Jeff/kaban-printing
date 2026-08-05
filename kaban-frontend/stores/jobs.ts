@@ -1,12 +1,14 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Job, SubmitJobPayload } from '~/types'
+import type { Job, Pricing, SubmitJobPayload } from '~/types'
 
 export const useJobsStore = defineStore('jobs', () => {
   const jobs      = ref<Job[]>([])
   const loading   = ref(false)
   const activeJob = ref<Job | null>(null)
   const error     = ref<string | null>(null)
+  // Admin-configured, fetched once and reused — see GET /jobs/pricing.
+  const pricing   = ref<Pricing | null>(null)
 
   const activeJobs = computed(() =>
     jobs.value.filter(j => ['pending', 'printing', 'ready'].includes(j.status))
@@ -38,10 +40,45 @@ export const useJobsStore = defineStore('jobs', () => {
     }
   }
 
+  /**
+   * Always hits the network — Pinia state survives client-side navigation, and
+   * an admin can change pricing mid-session, so a "fetch once" cache would keep
+   * showing a stale value until a full page reload.
+   */
+  async function fetchPricing(): Promise<void> {
+    const api = useApi()
+    const res = await api<any>('/jobs/pricing')
+    pricing.value = res.data
+  }
+
   async function fetchPage(page: number, size = 10): Promise<Job[]> {
     const api = useApi()
     const res = await api<any>('/jobs/my-jobs', { params: { page, size } })
     return res.data?.jobs ?? []
+  }
+
+  /**
+   * Fetches a single job by id — needed whenever a job detail page is opened
+   * directly or reloaded, since Pinia state (jobs/activeJob) doesn't survive a
+   * full page refresh and there's otherwise nothing in the store to show.
+   * Returns null on a 404 (not found, or belongs to someone else) rather than
+   * throwing, so callers can render a clean "not found" state.
+   */
+  async function fetchOne(id: string): Promise<Job | null> {
+    try {
+      const api = useApi()
+      const res = await api<any>(`/jobs/${id}`)
+      const job = res.data as Job
+
+      const idx = jobs.value.findIndex(j => j.id === id)
+      if (idx >= 0) jobs.value[idx] = job
+      else jobs.value.unshift(job)
+      activeJob.value = job
+
+      return job
+    } catch {
+      return null
+    }
   }
 
   async function submitJob(payload: SubmitJobPayload): Promise<Job> {
@@ -118,9 +155,9 @@ export const useJobsStore = defineStore('jobs', () => {
   function setActiveJob(job: Job) { activeJob.value = job }
 
   return {
-    jobs, loading, activeJob, error,
+    jobs, loading, activeJob, error, pricing,
     activeJobs, jobsThisMonth, totalSpent,
-    fetchMyJobs, fetchPage, submitJob, initiateMpesa, setActiveJob,
+    fetchMyJobs, fetchPage, fetchOne, fetchPricing, submitJob, initiateMpesa, setActiveJob,
   }
 })
 

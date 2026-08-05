@@ -27,6 +27,12 @@ export class JobsController {
     return this.jobsService.findMyJobs(user.id, Number(page), Number(size));
   }
 
+  // Must stay ahead of the ':id' route below, or "pricing" gets matched as an id.
+  @Get('pricing')
+  getPricing() {
+    return this.jobsService.getPricing();
+  }
+
   @Get(':id')
   @UseGuards(OwnershipGuard)
   @CheckOwnership({ model: Job, idParam: 'id', bypassRoles: [UserRole.ADMIN, UserRole.CLERK] })

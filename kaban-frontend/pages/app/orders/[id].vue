@@ -5,16 +5,16 @@
     class="fixed top-0 w-full z-50 h-12 flex justify-between items-center px-margin-mobile"
     style="background-color: #1B2D5B;"
   >
-    <div class="flex items-center gap-md">
+    <div class="flex items-center gap-md min-w-0">
       <button
         @click="router.push('/app/orders')"
-        class="text-on-primary active:scale-95 transition-transform"
+        class="text-on-primary active:scale-95 transition-transform flex-shrink-0"
       >
         <span class="material-symbols-outlined" style="font-variation-settings:'wght' 600;">arrow_back</span>
       </button>
-      <h1 class="font-headline-md text-headline-md text-on-primary font-bold">{{ job?.id }}</h1>
+      <h1 class="font-headline-md text-headline-md text-on-primary font-bold truncate">{{ jobTitle }}</h1>
     </div>
-    <div class="text-on-primary/80 font-label-bold text-label-bold uppercase">
+    <div class="text-on-primary/80 font-label-bold text-label-bold uppercase flex-shrink-0">
       {{ isComplete ? 'Complete' : topBarStatus }}
     </div>
   </header>
@@ -22,9 +22,39 @@
   <main class="pt-16 px-margin-mobile flex flex-col gap-xl pb-4">
 
     <!-- ══════════════════════════════════════════════════════════
+         LOADING STATE (fetching by id — e.g. after a page refresh)
+         ══════════════════════════════════════════════════════════ -->
+    <template v-if="pageLoading">
+      <div class="animate-pulse flex flex-col gap-md mt-xl">
+        <div class="h-8 bg-surface-container rounded-lg w-2/3"></div>
+        <div class="h-40 bg-surface-container rounded-xl"></div>
+        <div class="h-24 bg-surface-container rounded-xl"></div>
+      </div>
+    </template>
+
+    <!-- ══════════════════════════════════════════════════════════
+         NOT FOUND (bad link, deleted job, or belongs to someone else)
+         ══════════════════════════════════════════════════════════ -->
+    <template v-else-if="!job">
+      <div class="flex flex-col items-center text-center gap-md mt-xl">
+        <span class="material-symbols-outlined text-on-surface-variant text-[48px]">search_off</span>
+        <p class="font-body-lg text-body-lg text-on-surface-variant">
+          We couldn't find that order.
+        </p>
+        <button
+          @click="router.push('/app/orders')"
+          class="h-12 px-lg rounded-lg text-on-primary font-label-bold text-label-bold uppercase active:scale-95 transition-transform"
+          style="background-color: #F97316;"
+        >
+          Back to orders
+        </button>
+      </div>
+    </template>
+
+    <!-- ══════════════════════════════════════════════════════════
          COMPLETE STATE (delivered)
          ══════════════════════════════════════════════════════════ -->
-    <template v-if="isComplete">
+    <template v-else-if="isComplete">
 
       <!-- Status label + badge -->
       <div class="flex justify-between items-center">
@@ -214,7 +244,7 @@
         </div>
 
         <!-- Notification toggles -->
-        <div class="mt-md pt-md border-t border-outline-variant flex flex-col gap-md">
+        <!-- <div class="mt-md pt-md border-t border-outline-variant flex flex-col gap-md">
           <div class="flex items-center justify-between">
             <div class="flex items-center gap-sm">
               <span class="material-symbols-outlined text-on-surface-variant">sms</span>
@@ -237,7 +267,7 @@
               </div>
             </div>
           </div>
-        </div>
+        </div> -->
       </div>
 
       <!-- Help section -->
@@ -257,8 +287,6 @@
 </template>
 
 <script setup lang="ts">
-import { JOBS } from '~/data/dummy'
-
 definePageMeta({ layout: 'customer', middleware: 'auth', requiresAuth: true, role: 'customer' })
 
 const route  = useRoute()
@@ -273,14 +301,37 @@ const jobId = computed(() => {
 
 const job = computed(() => {
   if (jobs.activeJob?.id === jobId.value) return jobs.activeJob
-  const fromStore = jobs.jobs.find(j => j.id === jobId.value)
-  if (fromStore) return fromStore
-  return JOBS.find(j => j.id === jobId.value) ?? null
+  return jobs.jobs.find(j => j.id === jobId.value) ?? null
 })
 
-const notifSms      = ref(job.value?.notifySms      ?? true)
-const notifWhatsapp = ref(job.value?.notifyWhatsapp  ?? false)
+// Pinia state doesn't survive a page refresh, so a direct visit or reload of
+// this route otherwise finds nothing in the store — fetch it explicitly.
+const pageLoading = ref(!job.value)
+
+onMounted(async () => {
+  if (job.value) return
+  await jobs.fetchOne(jobId.value)
+  pageLoading.value = false
+})
+
+// The job's own id is a UUID — meaningless to a customer. The file name (or a
+// fallback for instructions-only jobs) is what they actually recognize.
+const jobTitle = computed(() => job.value?.fileName ?? 'Print job')
+
+const notifSms      = ref(true)
+const notifWhatsapp = ref(false)
 const filledIcon    = "font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;"
+
+// job loads asynchronously now, so these can't be initialized inline off
+// job.value at setup time — set them once, the first time the job arrives,
+// without clobbering a toggle the user has already flipped.
+let notifDefaultsSet = false
+watch(job, (j) => {
+  if (!j || notifDefaultsSet) return
+  notifSms.value      = j.notifySms      ?? true
+  notifWhatsapp.value = j.notifyWhatsapp ?? false
+  notifDefaultsSet = true
+}, { immediate: true })
 
 const isComplete = computed(() => job.value?.status === 'delivered')
 

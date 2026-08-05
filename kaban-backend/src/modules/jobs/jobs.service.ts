@@ -5,23 +5,24 @@ import { InjectModel } from '@nestjs/sequelize';
 import { Job, JobStatus, PaymentStatus } from './models/job.model';
 import { File } from '../files/models/file.model';
 import { User, UserRole } from '../users/models/user.model';
+import { Setting } from '../admin/models/setting.model';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateJobDto } from './dto/create-job.dto';
-
-const PRICING = {
-  bwPerPage:             5,
-  colorPerPage:          20,
-  doubleSidedMultiplier: 1.8,
-  deliveryFee:           50,
-};
+import { getPricing } from '../../common/utils/pricing.util';
 
 @Injectable()
 export class JobsService {
   constructor(
-    @InjectModel(Job)  private readonly jobModel:  typeof Job,
-    @InjectModel(File) private readonly fileModel: typeof File,
+    @InjectModel(Job)     private readonly jobModel:     typeof Job,
+    @InjectModel(File)    private readonly fileModel:    typeof File,
+    @InjectModel(Setting) private readonly settingModel: typeof Setting,
     private readonly notificationsService: NotificationsService,
   ) {}
+
+  /** Exposed via GET /jobs/pricing so the customer app can show a live estimate. */
+  getPricing() {
+    return getPricing(this.settingModel);
+  }
 
   async create(dto: CreateJobDto, user: User) {
     if (!dto.fileId && !dto.instructions?.trim()) {
@@ -40,10 +41,11 @@ export class JobsService {
       pages    = file.pageCount;
     }
 
-    const perPage     = dto.colorMode === 'color' ? PRICING.colorPerPage : PRICING.bwPerPage;
-    const sidesMult   = dto.sides === 'double' ? PRICING.doubleSidedMultiplier : 1;
+    const pricing     = await getPricing(this.settingModel);
+    const perPage     = dto.colorMode === 'color' ? pricing.colorPerPage : pricing.bwPerPage;
+    const sidesMult   = dto.sides === 'double' ? pricing.doubleSidedMultiplier : 1;
     const cost        = Math.round(pages * dto.copies * perPage * sidesMult);
-    const deliveryFee = dto.deliveryType === 'delivery' ? PRICING.deliveryFee : 0;
+    const deliveryFee = dto.deliveryType === 'delivery' ? pricing.deliveryFee : 0;
 
     const paymentStatus = dto.paymentMethod === 'pay_on_pickup'
       ? PaymentStatus.PAY_ON_PICKUP

@@ -12,6 +12,7 @@ import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { SaveNotesDto } from './dto/save-notes.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { SaveSettingsDto } from './dto/save-settings.dto';
+import { DEFAULT_PRICING } from '../../common/utils/pricing.util';
 
 const DEFAULT_SETTINGS = {
   business: {
@@ -28,12 +29,7 @@ const DEFAULT_SETTINGS = {
       sun: { open: false, from: '09:00', to: '14:00' },
     },
   },
-  pricing: {
-    bwPerPage: 5,
-    colorPerPage: 20,
-    doubleSidedMultiplier: 1.8,
-    deliveryFee: 50,
-  },
+  pricing: DEFAULT_PRICING,
   notificationMatrix: {
     job_received:      { sms: true,  whatsapp: true,  push: true  },
     payment_confirmed: { sms: true,  whatsapp: true,  push: true  },

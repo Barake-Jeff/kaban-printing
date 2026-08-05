@@ -80,7 +80,7 @@
         </div>
 
         <!-- SMS -->
-        <div class="flex items-center justify-between p-md">
+        <!-- <div class="flex items-center justify-between p-md">
           <div class="flex items-center gap-sm">
             <span class="material-symbols-outlined text-on-surface-variant">sms</span>
             <span class="font-body-lg text-body-lg">Notify me via SMS</span>
@@ -90,10 +90,10 @@
               <div :class="['absolute top-[2px] left-[2px] bg-white w-5 h-5 rounded-full transition-transform shadow', notifSms ? 'translate-x-5' : '']"></div>
             </div>
           </div>
-        </div>
+        </div> -->
 
         <!-- WhatsApp -->
-        <div class="flex items-center justify-between p-md">
+        <!-- <div class="flex items-center justify-between p-md">
           <div class="flex items-center gap-sm">
             <span class="material-symbols-outlined text-on-surface-variant">chat</span>
             <span class="font-body-lg text-body-lg">Notify me via WhatsApp</span>
@@ -103,7 +103,7 @@
               <div :class="['absolute top-[2px] left-[2px] bg-white w-5 h-5 rounded-full transition-transform shadow', notifWhatsapp ? 'translate-x-5' : '']"></div>
             </div>
           </div>
-        </div>
+        </div> -->
       </div>
     </section>
 
