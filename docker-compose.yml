@@ -1,0 +1,95 @@
+services:
+  db:
+    image: mysql:8
+    container_name: kaban-db
+    env_file:
+      - ./kaban-backend/.env
+    # The MySQL container reads these vars from the backend .env:
+    #   MYSQL_ROOT_PASSWORD  (same value as DB_PASSWORD)
+    #   MYSQL_DATABASE       (same value as DB_NAME)
+    volumes:
+      - mysql_data:/var/lib/mysql
+    ports:
+      - "127.0.0.1:3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - kaban-net
+
+  minio:
+    image: minio/minio:latest
+    container_name: kaban-minio
+    command: server /data --console-address ":9001"
+    env_file:
+      - ./kaban-backend/.env
+    # MinIO reads MINIO_ROOT_USER and MINIO_ROOT_PASSWORD from the env file
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console (http://localhost:9001)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - kaban-net
+
+  backend:
+    container_name: kaban-backend
+    build:
+      context: ./kaban-backend
+      dockerfile: Dockerfile
+    env_file:
+      - ./kaban-backend/.env
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kaban-net
+
+  frontend:
+    container_name: kaban-frontend
+    build:
+      context: ./kaban-frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - HOST=0.0.0.0
+      - PORT=3000
+      - NUXT_PUBLIC_API_BASE=http://localhost:3001/api
+    depends_on:
+      - backend
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - kaban-net
+
+volumes:
+  mysql_data:
+  minio_data:
+
+networks:
+  kaban-net:

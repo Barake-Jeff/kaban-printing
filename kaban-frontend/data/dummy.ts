@@ -212,3 +212,113 @@ export function getPaymentLabel(method: string): string {
   const map: Record<string, string> = { mpesa: 'M-Pesa', pay_on_pickup: 'Pay on pickup' }
   return map[method] ?? method
 }
+
+// ── Admin: Report Data ────────────────────────────────────────────────────────
+
+export const REPORT_DATA = {
+  dailyRevenue: [
+    { date: '2026-06-17', revenue: 420 },
+    { date: '2026-06-18', revenue: 610 },
+    { date: '2026-06-19', revenue: 390 },
+    { date: '2026-06-20', revenue: 520 },
+    { date: '2026-06-21', revenue: 480 },
+    { date: '2026-06-22', revenue: 150 },
+    { date: '2026-06-23', revenue: 210 },
+    { date: '2026-06-24', revenue: 640 },
+    { date: '2026-06-25', revenue: 710 },
+    { date: '2026-06-26', revenue: 540 },
+    { date: '2026-06-27', revenue: 620 },
+    { date: '2026-06-28', revenue: 490 },
+    { date: '2026-06-29', revenue: 580 },
+    { date: '2026-06-30', revenue: 640 },
+  ],
+  jobsByDayOfWeek: [
+    { day: 'Mon', count: 18 },
+    { day: 'Tue', count: 22 },
+    { day: 'Wed', count: 19 },
+    { day: 'Thu', count: 25 },
+    { day: 'Fri', count: 30 },
+    { day: 'Sat', count: 14 },
+    { day: 'Sun', count: 6 },
+  ],
+  jobsByStatus: [
+    { status: 'pending',   count: 5  },
+    { status: 'printing',  count: 3  },
+    { status: 'ready',     count: 4  },
+    { status: 'delivered', count: 47 },
+  ],
+  averageFulfillmentMinutes: 47,
+  paymentMethodSplit: [
+    { method: 'mpesa',        count: 38 },
+    { method: 'pay_on_pickup', count: 21 },
+  ],
+  topCustomers: [
+    { name: 'John Kamau',   totalSpent: 2450, totalJobs: 14 },
+    { name: 'Amina Osei',   totalSpent: 1890, totalJobs: 11 },
+    { name: 'Peter Njoroge',totalSpent: 1640, totalJobs: 9  },
+    { name: 'Grace Wanjiku',totalSpent: 1210, totalJobs: 7  },
+    { name: 'David Mwangi', totalSpent:  980, totalJobs: 6  },
+  ],
+}
+
+// ── Admin: Settings Dummy ─────────────────────────────────────────────────────
+
+export const SETTINGS_DUMMY = {
+  business: {
+    name:    'PrintEase Store',
+    phone:   '0712345678',
+    address: '14 Westlands Avenue, Nairobi',
+    hours: {
+      mon: { open: true,  from: '07:00', to: '20:00' },
+      tue: { open: true,  from: '07:00', to: '20:00' },
+      wed: { open: true,  from: '07:00', to: '20:00' },
+      thu: { open: true,  from: '07:00', to: '20:00' },
+      fri: { open: true,  from: '07:00', to: '20:00' },
+      sat: { open: true,  from: '08:00', to: '18:00' },
+      sun: { open: false, from: '08:00', to: '14:00' },
+    },
+  },
+  pricing: {
+    bwPerPage:              5,
+    colorPerPage:          20,
+    doubleSidedMultiplier:  1.8,
+    deliveryFee:           50,
+  },
+  notificationMatrix: {
+    job_received:      { sms: true,  whatsapp: true,  push: true  },
+    payment_confirmed: { sms: true,  whatsapp: true,  push: true  },
+    printing_started:  { sms: false, whatsapp: true,  push: true  },
+    job_ready:         { sms: true,  whatsapp: true,  push: true  },
+    job_delivered:     { sms: true,  whatsapp: false, push: true  },
+    payment_failed:    { sms: true,  whatsapp: true,  push: true  },
+  },
+}
+
+// ── Admin: Staff Dummy ────────────────────────────────────────────────────────
+
+export const STAFF_DUMMY = [
+  {
+    id:       'staff_001',
+    name:     'Admin User',
+    phone:    '0700000000',
+    role:     'admin'  as const,
+    active:   true,
+    joinedAt: '2024-01-15T08:00:00.000Z',
+  },
+  {
+    id:       'staff_002',
+    name:     'Mary Waweru',
+    phone:    '0722111222',
+    role:     'clerk' as const,
+    active:   true,
+    joinedAt: '2024-03-01T08:00:00.000Z',
+  },
+  {
+    id:       'staff_003',
+    name:     'James Oduya',
+    phone:    '0733444555',
+    role:     'clerk' as const,
+    active:   false,
+    joinedAt: '2024-05-20T08:00:00.000Z',
+  },
+]

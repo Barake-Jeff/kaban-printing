@@ -5,7 +5,7 @@ export type DeliveryType = 'pickup' | 'delivery'
 export type PaymentMethod = 'mpesa' | 'pay_on_pickup'
 export type PaymentStatus = 'paid' | 'unpaid' | 'pay_on_pickup'
 export type JobStatus = 'pending' | 'printing' | 'ready' | 'delivered'
-export type UserRole = 'customer' | 'admin'
+export type UserRole = 'customer' | 'clerk' | 'admin'
 export type AlertType = 'unpaid' | 'wait' | 'delivery'
 
 export interface User {
@@ -15,6 +15,10 @@ export interface User {
   houseNumber?: string
   estate?: string
   role?: UserRole
+  notifSms?: boolean
+  notifWhatsapp?: boolean
+  creditBalance?: number
+  loyaltyPoints?: number
 }
 
 export interface Job {
@@ -108,6 +112,7 @@ export interface SignupPayload {
 }
 
 export interface SubmitJobPayload {
+  fileId?: string
   fileName: string | null
   instructions: string
   copies: number
@@ -117,6 +122,79 @@ export interface SubmitJobPayload {
   deliveryType: DeliveryType
   pages: number
   paymentMethod?: PaymentMethod
+}
+
+export interface AppNotification {
+  id: string
+  jobId: string
+  trigger: string
+  channel: 'sms' | 'whatsapp' | 'push'
+  status: 'sent' | 'failed'
+  sentAt: string
+}
+
+// ── Admin: Reports ────────────────────────────────────────────────────────────
+
+export interface ReportData {
+  dailyRevenue: { date: string; revenue: number }[]
+  jobsByDayOfWeek: { day: string; count: number }[]
+  jobsByStatus: { status: string; count: number }[]
+  averageFulfillmentMinutes: number
+  paymentMethodSplit: { method: string; count: number }[]
+  topCustomers: { name: string; totalSpent: number; totalJobs: number }[]
+}
+
+// ── Admin: Settings ───────────────────────────────────────────────────────────
+
+export interface DayHours {
+  open: boolean
+  from: string
+  to: string
+}
+
+export interface BusinessHours {
+  mon: DayHours; tue: DayHours; wed: DayHours
+  thu: DayHours; fri: DayHours; sat: DayHours; sun: DayHours
+}
+
+export interface BusinessInfo {
+  name: string
+  phone: string
+  address: string
+  hours: BusinessHours
+}
+
+export interface NotificationChannelPrefs {
+  sms: boolean
+  whatsapp: boolean
+  push: boolean
+}
+
+export type NotificationTrigger =
+  | 'job_received'
+  | 'payment_confirmed'
+  | 'printing_started'
+  | 'job_ready'
+  | 'job_delivered'
+  | 'payment_failed'
+
+export type NotificationMatrix = Record<NotificationTrigger, NotificationChannelPrefs>
+
+export interface SettingsState {
+  business: BusinessInfo
+  pricing: Pricing
+  notificationMatrix: NotificationMatrix
+}
+
+// ── Admin: Staff ──────────────────────────────────────────────────────────────
+
+export interface StaffMember {
+  id: string
+  name: string
+  phone: string
+  role: 'admin' | 'clerk'
+  active: boolean
+  joinedAt: string
 }
 
 // Augment vue-router RouteMeta with our custom page meta fields

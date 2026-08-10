@@ -1,63 +1,63 @@
 # File Handling — Upload, Conversion & Serving
 
-> This file covers the complete file pipeline:
-> upload → validate → store → convert to PDF → extract page count → serve.
-> The Electron print client expects PDFs. All files must be converted.
+> Storage: MinIO (S3-compatible). Files are never written to the container's local disk
+> permanently. The pipeline is: receive buffer → convert in /tmp → upload to MinIO → store key in DB.
+> Presigned URLs are generated on demand; nothing is served from local disk.
 
 ---
 
 ## Accepted file types
 
-| MIME type                                                               | Extension | Convert to PDF? |
-|-------------------------------------------------------------------------|-----------|-----------------|
-| `application/pdf`                                                       | .pdf      | No (already PDF)|
-| `application/msword`                                                    | .doc      | Yes             |
-| `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | .docx  | Yes             |
-| `image/jpeg`                                                            | .jpg/.jpeg| Yes             |
-| `image/png`                                                             | .png      | Yes             |
+| MIME type                                                               | Extension  | Convert to PDF? |
+|-------------------------------------------------------------------------|------------|-----------------|
+| `application/pdf`                                                       | .pdf       | No              |
+| `application/msword`                                                    | .doc       | Yes             |
+| `application/vnd.openxmlformats-officedocument.wordprocessingml.document` | .docx   | Yes             |
+| `image/jpeg`                                                            | .jpg/.jpeg | Yes             |
+| `image/png`                                                             | .png       | Yes             |
 
-Reject any other MIME type with a `400 Bad Request`.
+Reject any other MIME type with `400 Bad Request`.
 
 ---
 
 ## File size limit
 
 - Maximum: `20MB` per file
-- Set in NestJS via `FileSizeValidator` and also in Multer config
+- Enforced via `MaxFileSizeValidator` in NestJS pipe
 - Return `413 Payload Too Large` if exceeded
 
 ---
 
-## Storage structure
+## MinIO bucket layout
 
 ```
-uploads/
+printease/              ← bucket name (from MINIO_BUCKET env var)
   originals/
     {userId}/
-      {uuid}-{originalFilename}    ← raw uploaded file
+      {uuid}{ext}       ← raw uploaded file
   pdfs/
     {userId}/
-      {uuid}.pdf                   ← converted PDF version
+      {uuid}.pdf        ← converted PDF
 ```
 
-Store the base upload directory in `.env` as `UPLOAD_DIR=./uploads`.
-Never hardcode the path. Always use `path.join(uploadDir, ...)`.
+Object keys (stored in DB):
+- `file_key` → `originals/{userId}/{uuid}{ext}`
+- `pdf_key`  → `pdfs/{userId}/{uuid}.pdf`
 
 ---
 
-## NestJS file upload setup
+## Controller
+
+Use `memoryStorage` — file arrives as `file.buffer` in memory, never touches disk.
 
 ```typescript
 // files.controller.ts
 import {
-  Controller, Post, UseInterceptors, UploadedFile,
+  Controller, Post, Get, Param, UseInterceptors, UploadedFile,
   UseGuards, ParseFilePipe, MaxFileSizeValidator, FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
-import { v4 as uuidv4 } from 'uuid';
-import { ConfigService } from '@nestjs/config';
+import { memoryStorage } from 'multer';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { FilesService } from './files.service';
@@ -65,31 +65,15 @@ import { FilesService } from './files.service';
 @Controller('files')
 @UseGuards(JwtAuthGuard)
 export class FilesController {
-  constructor(
-    private readonly filesService: FilesService,
-    private readonly config: ConfigService,
-  ) {}
+  constructor(private readonly filesService: FilesService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', {
-    storage: diskStorage({
-      destination: (req, file, cb) => {
-        const uploadDir = join(process.cwd(), 'uploads', 'originals', req.user.id);
-        // Ensure directory exists — do this in service, not here
-        cb(null, uploadDir);
-      },
-      filename: (req, file, cb) => {
-        const uuid = uuidv4();
-        const ext  = extname(file.originalname);
-        cb(null, `${uuid}${ext}`);
-      },
-    }),
-  }))
-  async uploadFile(
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  uploadFile(
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 20 * 1024 * 1024 }),  // 20MB
+          new MaxFileSizeValidator({ maxSize: 20 * 1024 * 1024 }),
           new FileTypeValidator({
             fileType: /(pdf|msword|wordprocessingml|jpeg|jpg|png)/,
           }),
@@ -101,107 +85,137 @@ export class FilesController {
   ) {
     return this.filesService.processUpload(file, user.id);
   }
+
+  @Get(':fileId')
+  getFileUrl(@Param('fileId') fileId: string, @CurrentUser() user) {
+    return this.filesService.getPresignedUrl(fileId, user.id);
+  }
 }
 ```
 
 ---
 
-## Files service — processUpload
+## Files service
 
 ```typescript
 // files.service.ts
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  Injectable, InternalServerErrorException, NotFoundException, ForbiddenException,
+} from '@nestjs/common';
+import { InjectModel } from '@nestjs/sequelize';
 import { ConfigService } from '@nestjs/config';
 import { exec } from 'child_process';
 import { promisify } from 'util';
-import { join, extname, basename } from 'path';
-import { mkdirSync, existsSync } from 'fs';
-import { File } from './entities/file.entity';
-import * as pdfParse from 'pdf-parse';
+import { extname, basename, join } from 'path';
+import { tmpdir } from 'os';
 import * as fs from 'fs/promises';
+import * as Minio from 'minio';
+import { v4 as uuidv4 } from 'uuid';
+import * as pdfParse from 'pdf-parse';
+import { File } from './models/file.model';
 
 const execAsync = promisify(exec);
 
 @Injectable()
 export class FilesService {
+  private readonly minioClient: Minio.Client;
+  private readonly bucket: string;
+
   constructor(
-    @InjectRepository(File)
-    private readonly fileRepo: Repository<File>,
+    @InjectModel(File)
+    private readonly fileModel: typeof File,
     private readonly config: ConfigService,
-  ) {}
+  ) {
+    this.bucket = this.config.get<string>('MINIO_BUCKET');
+    this.minioClient = new Minio.Client({
+      endPoint:  this.config.get<string>('MINIO_ENDPOINT'),
+      port:      parseInt(this.config.get<string>('MINIO_PORT'), 10),
+      useSSL:    this.config.get<string>('MINIO_USE_SSL') === 'true',
+      accessKey: this.config.get<string>('MINIO_ACCESS_KEY'),
+      secretKey: this.config.get<string>('MINIO_SECRET_KEY'),
+    });
+  }
 
   async processUpload(file: Express.Multer.File, userId: string) {
-    // Ensure PDF output directory exists
-    const pdfDir = join(process.cwd(), 'uploads', 'pdfs', userId);
-    if (!existsSync(pdfDir)) mkdirSync(pdfDir, { recursive: true });
+    const uuid = uuidv4();
+    const ext  = extname(file.originalname);
 
-    let pdfPath: string;
+    // Upload original to MinIO
+    const fileKey = `originals/${userId}/${uuid}${ext}`;
+    await this.minioClient.putObject(this.bucket, fileKey, file.buffer, file.size, {
+      'Content-Type': file.mimetype,
+    });
+
+    // Convert to PDF if needed; upload PDF to MinIO
+    let pdfKey: string;
     let pageCount = 1;
 
-    const isPdf = file.mimetype === 'application/pdf';
-
-    if (isPdf) {
-      pdfPath = file.path;
-      pageCount = await this.getPdfPageCount(file.path);
+    if (file.mimetype === 'application/pdf') {
+      pdfKey    = fileKey;
+      pageCount = await this.getPdfPageCount(file.buffer);
     } else {
-      pdfPath = await this.convertToPdf(file.path, pdfDir);
-      pageCount = await this.getPdfPageCount(pdfPath);
+      const pdfBuffer = await this.convertToPdf(file.buffer, ext);
+      pdfKey = `pdfs/${userId}/${uuid}.pdf`;
+      await this.minioClient.putObject(this.bucket, pdfKey, pdfBuffer, pdfBuffer.length, {
+        'Content-Type': 'application/pdf',
+      });
+      pageCount = await this.getPdfPageCount(pdfBuffer);
     }
 
-    // Build public URLs
-    const uploadDir  = this.config.get<string>('UPLOAD_DIR');
-    const fileUrl    = file.path.replace(process.cwd(), '');
-    const pdfUrl     = pdfPath.replace(process.cwd(), '');
-
-    // Save to database
-    const record = this.fileRepo.create({
+    // Persist record — store keys, not URLs
+    const record = await this.fileModel.create({
       userId,
       originalName: file.originalname,
-      storedName:   basename(file.path),
+      storedName:   `${uuid}${ext}`,
       mimeType:     file.mimetype,
       sizeBytes:    file.size,
       pageCount,
-      fileUrl,
-      pdfUrl,
+      fileKey,
+      pdfKey,
     });
-    await this.fileRepo.save(record);
 
-    return {
-      fileId:    record.id,
-      fileName:  file.originalname,
-      fileUrl,
-      pdfUrl,
-      pageCount,
-    };
+    // Return presigned URLs valid for 1 hour
+    const fileUrl = await this.minioClient.presignedGetObject(this.bucket, fileKey, 3600);
+    const pdfUrl  = await this.minioClient.presignedGetObject(this.bucket, pdfKey,  3600);
+
+    return { fileId: record.id, fileName: file.originalname, fileUrl, pdfUrl, pageCount };
   }
 
-  private async convertToPdf(inputPath: string, outputDir: string): Promise<string> {
-    // LibreOffice headless conversion
-    // --convert-to pdf  → output format
-    // --outdir          → output directory
-    // --headless        → no GUI
-    const cmd = `libreoffice --headless --convert-to pdf --outdir "${outputDir}" "${inputPath}"`;
+  async getPresignedUrl(fileId: string, userId: string) {
+    const file = await this.fileModel.findOne({ where: { id: fileId } });
+    if (!file) throw new NotFoundException('File not found');
+    if (file.userId !== userId) throw new ForbiddenException();
+
+    const url = await this.minioClient.presignedGetObject(this.bucket, file.pdfKey, 3600);
+    return { url };
+  }
+
+  // Write buffer to /tmp, run LibreOffice, read output, clean up
+  private async convertToPdf(buffer: Buffer, ext: string): Promise<Buffer> {
+    const id        = uuidv4();
+    const tmpIn     = join(tmpdir(), `${id}${ext}`);
+    const tmpOut    = join(tmpdir(), `${id}.pdf`);
+
+    await fs.writeFile(tmpIn, buffer);
 
     try {
-      await execAsync(cmd, { timeout: 30000 });  // 30 second timeout
-    } catch (err) {
+      const cmd = `libreoffice --headless --convert-to pdf --outdir "${tmpdir()}" "${tmpIn}"`;
+      await execAsync(cmd, { timeout: 30_000 });
+      return await fs.readFile(tmpOut);
+    } catch {
       throw new InternalServerErrorException('File conversion failed');
+    } finally {
+      await fs.unlink(tmpIn).catch(() => {});
+      await fs.unlink(tmpOut).catch(() => {});
     }
-
-    // LibreOffice outputs filename with .pdf extension replacing original ext
-    const originalBase = basename(inputPath, extname(inputPath));
-    return join(outputDir, `${originalBase}.pdf`);
   }
 
-  private async getPdfPageCount(pdfPath: string): Promise<number> {
+  private async getPdfPageCount(buffer: Buffer): Promise<number> {
     try {
-      const buffer = await fs.readFile(pdfPath);
-      const data   = await pdfParse(buffer);
+      const data = await pdfParse(buffer);
       return data.numpages;
     } catch {
-      return 1;  // fallback if parse fails
+      return 1;
     }
   }
 }
@@ -209,52 +223,104 @@ export class FilesService {
 
 ---
 
-## LibreOffice installation
+## File model
 
-LibreOffice must be installed on the server for conversion to work.
+```typescript
+// models/file.model.ts
+import { Table, Column, Model, DataType, ForeignKey } from 'sequelize-typescript';
+import { User } from '../../users/models/user.model';
 
-```bash
-# Ubuntu/Debian
-sudo apt-get install libreoffice
+@Table({ tableName: 'files', timestamps: false })
+export class File extends Model {
+  @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })
+  id: string;
 
-# Verify installation
-libreoffice --version
-```
+  @ForeignKey(() => User)
+  @Column({ type: DataType.UUID, allowNull: false, field: 'user_id' })
+  userId: string;
 
-For Docker-based production:
-```dockerfile
-RUN apt-get update && apt-get install -y libreoffice && apt-get clean
+  @Column({ type: DataType.STRING(500), allowNull: false, field: 'original_name' })
+  originalName: string;
+
+  @Column({ type: DataType.STRING(500), allowNull: false, field: 'stored_name' })
+  storedName: string;
+
+  @Column({ type: DataType.STRING(100), allowNull: false, field: 'mime_type' })
+  mimeType: string;
+
+  @Column({ type: DataType.INTEGER, allowNull: false, field: 'size_bytes' })
+  sizeBytes: number;
+
+  @Column({ type: DataType.INTEGER, defaultValue: 1, field: 'page_count' })
+  pageCount: number;
+
+  @Column({ type: DataType.STRING(1000), allowNull: false, field: 'file_key' })
+  fileKey: string;
+
+  @Column({ type: DataType.STRING(1000), allowNull: true, field: 'pdf_key' })
+  pdfKey: string;
+
+  @Column({ type: DataType.DATE, defaultValue: DataType.NOW, field: 'created_at' })
+  createdAt: Date;
+}
 ```
 
 ---
 
-## Serving files (authenticated)
+## LibreOffice in Docker
 
-Files should only be accessible to the owner or admin. Never expose raw file paths publicly.
+Add to `kaban-backend/Dockerfile` stage 2:
+
+```dockerfile
+# Install LibreOffice for PDF conversion
+RUN apk add --no-cache libreoffice openjdk17-jre font-noto
+```
+
+`apk` is Alpine's package manager (the base image is `node:24-alpine`).
+
+---
+
+## Bucket initialisation
+
+Create the bucket on first run. Add this to `FilesService.onModuleInit()`:
 
 ```typescript
-// files.controller.ts
-@Get(':filename')
-@UseGuards(JwtAuthGuard)
-async serveFile(
-  @Param('filename') filename: string,
-  @CurrentUser() user,
-  @Res() res: Response,
-) {
-  // Verify ownership
-  const file = await this.filesService.findByFilename(filename, user.id);
-  if (!file) throw new NotFoundException('File not found');
-
-  const filePath = join(process.cwd(), file.fileUrl);
-  res.sendFile(filePath);
+async onModuleInit() {
+  const exists = await this.minioClient.bucketExists(this.bucket);
+  if (!exists) {
+    await this.minioClient.makeBucket(this.bucket, 'us-east-1');
+  }
 }
 ```
+
+Implement `OnModuleInit` from `@nestjs/common`.
+
+---
+
+## What the frontend expects from POST /api/files/upload
+
+```typescript
+{
+  statusCode: 200,
+  message: 'Success',
+  data: {
+    fileId:    'uuid',
+    fileName:  'document.pdf',
+    fileUrl:   'https://minio:9000/printease/originals/.../uuid.pdf?X-Amz-...',
+    pdfUrl:    'https://minio:9000/printease/pdfs/.../uuid.pdf?X-Amz-...',
+    pageCount: 4,
+  }
+}
+```
+
+Presigned URLs expire after 1 hour. The frontend should use them immediately for display/preview only.
 
 ---
 
 ## npm packages required
 
 ```bash
+npm install minio
 npm install multer @types/multer
 npm install pdf-parse @types/pdf-parse
 npm install uuid @types/uuid
@@ -263,31 +329,10 @@ npm install @nestjs/platform-express
 
 ---
 
-## What the frontend expects from POST /api/files/upload
-
-```typescript
-// Response shape — must match frontend expectation
-{
-  statusCode: 200,
-  message: 'Success',
-  data: {
-    fileId:    'uuid',
-    fileName:  'CV_John_Kamau.pdf',
-    fileUrl:   '/uploads/originals/user123/uuid.pdf',
-    pdfUrl:    '/uploads/pdfs/user123/uuid.pdf',
-    pageCount: 4,
-  }
-}
-```
-
-The frontend uses `pageCount` for the cost estimate. This must be accurate.
-
----
-
 ## Security rules
 
-- Never trust the client-provided filename — always use the stored name
-- Never serve files from a public static directory — always go through the authenticated endpoint
-- Sanitize filenames — strip path traversal characters (`..`, `/`, `\`)
-- Validate MIME type from the actual file content (Multer does this), not just the extension
-- Delete original file after successful PDF conversion if disk space is a concern
+- Never trust client-provided filenames — use the UUID-based `storedName`
+- Never expose raw MinIO keys in API responses — always return presigned URLs
+- Presigned URLs expire in 1 hour — the frontend must not cache them long-term
+- Validate MIME type from actual file content (Multer does this), not just the extension
+- Ownership check before generating any presigned URL

@@ -1,216 +1,92 @@
 <template>
   <div class="text-on-surface">
 
-    <!-- TopAppBar -->
-    <header class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-mobile h-12 bg-primary-container">
-      <div class="flex items-center gap-xs">
-        <span class="material-symbols-outlined text-on-primary">print</span>
-        <span class="font-headline-md text-headline-md font-bold text-on-primary">PrintEase</span>
-      </div>
-      <button
-        @click="activeTab = 'login'"
-        class="text-on-primary/80 font-label-bold text-label-bold hover:bg-primary-container hover:text-on-primary-container transition-colors px-4 py-1 rounded-full active:scale-95"
-      >
-        Login
-      </button>
-    </header>
+    <CommonTopAppBar login-action="emit" @login-click="setTab('login')" />
 
-    <main class="pt-12 pb-20 min-h-screen flex flex-col">
+    <main class="pt-12 pb-8 min-h-screen flex flex-col">
+
+      <h1 class="sr-only">Sign in or create a PrintEase account</h1>
 
       <!-- Auth Tabs -->
-      <nav class="flex w-full bg-surface border-b border-outline-variant sticky top-12 z-40">
+      <div
+        role="tablist"
+        aria-label="Sign up or log in"
+        class="flex w-full bg-surface border-b border-outline-variant sticky top-12 z-40"
+      >
         <button
-          @click="activeTab = 'signup'"
+          v-for="tab in tabs"
+          :id="`tab-${tab.key}`"
+          :key="tab.key"
+          role="tab"
+          type="button"
+          :aria-selected="activeTab === tab.key"
+          :aria-controls="`panel-${tab.key}`"
+          :tabindex="activeTab === tab.key ? 0 : -1"
           :class="['flex-1 py-4 text-center font-label-bold text-label-bold uppercase tracking-wider transition-all',
-            activeTab === 'signup' ? 'tab-active' : 'tab-inactive']"
+            activeTab === tab.key ? 'tab-active' : 'tab-inactive']"
+          @click="setTab(tab.key)"
+          @keydown.left.prevent="cycleTab(-1)"
+          @keydown.right.prevent="cycleTab(1)"
         >
-          Sign up
+          {{ tab.label }}
         </button>
-        <button
-          @click="activeTab = 'login'"
-          :class="['flex-1 py-4 text-center font-label-bold text-label-bold uppercase tracking-wider transition-all',
-            activeTab === 'login' ? 'tab-active' : 'tab-inactive']"
-        >
-          Log in
-        </button>
-      </nav>
+      </div>
 
       <section class="px-margin-mobile py-xl flex-grow">
 
-        <!-- ── Sign Up Form ── -->
-        <div v-if="activeTab === 'signup'" class="space-y-lg">
-          <div class="bg-surface-container-low rounded-xl p-md">
-            <form @submit.prevent="handleSignup" class="space-y-md">
-
-              <div class="space-y-xs">
-                <label class="block font-label-bold text-label-bold text-primary font-normal">Full name</label>
-                <input
-                  v-model="signupForm.name"
-                  type="text"
-                  placeholder="Enter your legal name"
-                  class="input-field"
-                  required
-                />
-              </div>
-
-              <div class="space-y-xs">
-                <label class="block font-label-bold text-label-bold text-primary font-normal">Phone number</label>
-                <div class="relative">
-                  <input
-                    v-model="signupForm.phone"
-                    type="tel"
-                    class="input-field"
-                    required
-                  />
-                  <span class="absolute right-3 top-3 material-symbols-outlined text-outline">call</span>
-                </div>
-              </div>
-
-              <div class="grid grid-cols-2 gap-md">
-                <div class="space-y-xs">
-                  <label class="block font-label-bold text-label-bold text-primary font-normal">House number</label>
-                  <input
-                    v-model="signupForm.houseNumber"
-                    type="text"
-                    placeholder="e.g. 14B"
-                    class="input-field"
-                    required
-                  />
-                </div>
-                <div class="space-y-xs">
-                  <label class="block font-label-bold text-label-bold text-primary font-normal">Estate/Street</label>
-                  <input
-                    v-model="signupForm.estate"
-                    type="text"
-                    placeholder="Street Name"
-                    class="input-field"
-                    required
-                  />
-                </div>
-              </div>
-
-              <div class="space-y-xs">
-                <label class="block font-label-bold text-label-bold text-primary font-normal">Password</label>
-                <div class="relative">
-                  <input
-                    v-model="signupForm.password"
-                    :type="showPass1 ? 'text' : 'password'"
-                    placeholder="Minimum 8 characters"
-                    class="input-field"
-                    required
-                  />
-                  <button
-                    @click="showPass1 = !showPass1"
-                    type="button"
-                    class="absolute right-3 top-3 text-outline hover:text-primary transition-colors"
-                  >
-                    <span class="material-symbols-outlined">{{ showPass1 ? 'visibility_off' : 'visibility' }}</span>
-                  </button>
-                </div>
-              </div>
-
-              <div class="space-y-xs">
-                <label class="block font-label-bold text-label-bold text-primary font-normal">Confirm password</label>
-                <div class="relative">
-                  <input
-                    v-model="signupForm.confirm"
-                    :type="showPass2 ? 'text' : 'password'"
-                    placeholder="Repeat password"
-                    class="input-field"
-                    required
-                  />
-                  <button
-                    @click="showPass2 = !showPass2"
-                    type="button"
-                    class="absolute right-3 top-3 text-outline hover:text-primary transition-colors"
-                  >
-                    <span class="material-symbols-outlined">{{ showPass2 ? 'visibility_off' : 'visibility' }}</span>
-                  </button>
-                </div>
-              </div>
-
-              <p v-if="signupError" class="text-error font-body-sm text-body-sm">{{ signupError }}</p>
-
-              <p class="italic text-on-surface-variant font-body-sm text-body-sm pt-2 font-normal">
-                Your house number is how we identify your orders.
-              </p>
-
-            </form>
-          </div>
-
-          <button
-            @click="handleSignup"
-            :disabled="auth.loading"
-            class="w-full h-12 bg-secondary-container text-on-primary font-label-bold text-label-bold uppercase tracking-widest rounded-lg active:scale-[0.98] transition-all flex items-center justify-center gap-sm disabled:opacity-60"
-          >
-            {{ auth.loading ? 'Creating account…' : 'Create account' }}
-          </button>
+        <!-- Offline notice: stops a submit that could never leave the device -->
+        <div v-if="!online" class="mb-md">
+          <CommonAlertBanner
+            tone="error"
+            message="You're offline. Reconnect to sign in or create an account."
+          />
         </div>
 
-        <!-- ── Log In Form ── -->
-        <div v-if="activeTab === 'login'" class="space-y-lg">
-          <div class="bg-surface-container-low rounded-xl p-md">
-            <form @submit.prevent="handleLogin" class="space-y-md">
-
-              <div class="space-y-xs">
-                <label class="block font-label-bold text-label-bold text-primary font-normal">Phone number</label>
-                <input
-                  v-model="loginForm.phone"
-                  type="text"
-                  placeholder="0712 345 678"
-                  class="input-field"
-                  required
-                />
-              </div>
-
-              <div class="space-y-xs">
-                <label class="block font-label-bold text-label-bold text-primary font-normal">Password</label>
-                <div class="relative">
-                  <input
-                    v-model="loginForm.password"
-                    :type="showLoginPass ? 'text' : 'password'"
-                    placeholder="••••••••"
-                    class="input-field"
-                    required
-                  />
-                  <button
-                    @click="showLoginPass = !showLoginPass"
-                    type="button"
-                    class="absolute right-3 top-3 text-outline hover:text-primary transition-colors"
-                  >
-                    <span class="material-symbols-outlined">{{ showLoginPass ? 'visibility_off' : 'visibility' }}</span>
-                  </button>
-                </div>
-              </div>
-
-              <div class="text-right">
-                <a href="#" class="font-label-bold text-label-bold text-secondary">Forgot Password?</a>
-              </div>
-
-              <p v-if="auth.error" class="text-error font-body-sm text-body-sm">{{ auth.error }}</p>
-
-            </form>
-          </div>
-
-          <button
-            @click="handleLogin"
-            :disabled="auth.loading"
-            class="w-full h-12 bg-primary text-on-primary font-label-bold text-label-bold uppercase tracking-widest rounded-lg active:scale-[0.98] transition-all flex items-center justify-center gap-sm disabled:opacity-60"
-          >
-            {{ auth.loading ? 'Logging in…' : 'Login' }}
-          </button>
-
-          <p class="font-body-sm text-body-sm text-center text-on-surface-variant pt-sm">
-            Demo customer: <strong>0712345678</strong> / <strong>password</strong><br>
-            Admin: <strong>0700000000</strong> / <strong>admin</strong>
-          </p>
+        <div
+          v-if="activeTab === 'signup'"
+          id="panel-signup"
+          role="tabpanel"
+          aria-labelledby="tab-signup"
+        >
+          <AuthSignupForm
+            :initial-phone="sharedPhone"
+            :disabled="!online"
+            @switch-tab="handleSwitchTab"
+          />
         </div>
 
-        <!-- Illustration -->
-        <div class="mt-xl text-center">
+        <div
+          v-else
+          id="panel-login"
+          role="tabpanel"
+          aria-labelledby="tab-login"
+        >
+          <AuthLoginForm
+            :initial-phone="sharedPhone"
+            :disabled="!online"
+            @switch-tab="handleSwitchTab"
+          />
+        </div>
+
+        <!-- Staff link -->
+        <p class="text-center mt-xl">
+          <NuxtLink
+            to="/admin/login"
+            class="text-xs text-on-surface-variant/50 hover:text-on-surface-variant transition-colors"
+          >
+            Staff? Sign in here →
+          </NuxtLink>
+        </p>
+
+        <!-- Illustration (decorative) -->
+        <div class="mt-md text-center">
           <img
             src="https://lh3.googleusercontent.com/aida-public/AB6AXuAbmbtIHqRKdcMynD5YK3ENsxjkYSiBxYL3ulRpr0mtO4hF4wJ6f9_Tfm4bNKAQVl8TSedOwfcnOZW-iaqx4p43AaKw84KoH1B1UT6AKby5vclFSlbLoWSEhQZzwf24jlrP8LUCdUAlAvvEiZLuZ56O0o-UOtgM6_m3Y1QEZm7rAJjgDUKglNsqpWfzqaIw3Bt02S-HBBztE0VN3sUn3zr6qvp5ZKtnKXedG68zaBAo7umVxwkyxoZw3b5y3fnNNEXBVwQQGyFHcIM"
-            alt="PrintEase Corporate Service"
+            alt=""
+            aria-hidden="true"
+            width="800"
+            height="450"
+            loading="lazy"
             class="w-full aspect-video object-cover rounded-xl grayscale-[40%] opacity-90"
           />
         </div>
@@ -218,100 +94,56 @@
       </section>
     </main>
 
-    <!-- Bottom Nav Bar -->
-    <nav class="fixed bottom-0 w-full z-50 bg-surface-container-lowest border-t border-outline-variant flex justify-around items-center h-16 px-xs">
-      <NuxtLink
-        to="/"
-        class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors px-4 py-1 rounded-full active:scale-90"
-      >
-        <span class="material-symbols-outlined">home</span>
-        <span class="font-label-bold text-label-bold">Home</span>
-      </NuxtLink>
-      <button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors px-4 py-1 rounded-full active:scale-90">
-        <span class="material-symbols-outlined">print_connect</span>
-        <span class="font-label-bold text-label-bold">Services</span>
-      </button>
-      <button class="flex flex-col items-center justify-center text-on-surface-variant hover:bg-surface-container-high transition-colors px-4 py-1 rounded-full active:scale-90">
-        <span class="material-symbols-outlined">receipt_long</span>
-        <span class="font-label-bold text-label-bold">Orders</span>
-      </button>
-      <button class="flex flex-col items-center justify-center bg-secondary-container text-on-secondary-container rounded-full px-4 py-1 active:scale-90">
-        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;">person</span>
-        <span class="font-label-bold text-label-bold">Profile</span>
-      </button>
-    </nav>
-
   </div>
 </template>
 
 <script setup lang="ts">
-import type { SignupPayload, LoginPayload } from '~/types'
+import { useOnline } from '@vueuse/core'
 
 definePageMeta({ middleware: 'auth' })
 
-const auth   = useAuthStore()
+type TabKey = 'signup' | 'login'
+
+const tabs = [
+  { key: 'signup' as const, label: 'Sign up' },
+  { key: 'login'  as const, label: 'Log in'  },
+]
+
+const route  = useRoute()
 const router = useRouter()
+const auth   = useAuthStore()
+const online = useOnline()
 
-const activeTab     = ref<'signup' | 'login'>('signup')
-const showPass1     = ref(false)
-const showPass2     = ref(false)
-const showLoginPass = ref(false)
-const signupError   = ref('')
+const activeTab   = ref<TabKey>(route.query.tab === 'login' ? 'login' : 'signup')
+/** Carries a typed number across the 401/409 handoffs so nobody retypes it. */
+const sharedPhone = ref('')
 
-const signupForm = reactive<SignupPayload>({
-  name: '',
-  phone: '+254',
-  houseNumber: '',
-  estate: '',
-  password: '',
-  confirm: '',
-})
-
-const loginForm = reactive<LoginPayload>({
-  phone: '',
-  password: '',
-})
-
-async function handleSignup() {
-  signupError.value = ''
-  if (signupForm.password.length < 8) {
-    signupError.value = 'Password must be at least 8 characters.'
-    return
-  }
-  if (signupForm.password !== signupForm.confirm) {
-    signupError.value = 'Passwords do not match.'
-    return
-  }
-  await auth.signup({ ...signupForm })
-  if (!auth.error) router.push({ name: 'app' })
+function setTab(tab: TabKey) {
+  if (activeTab.value === tab) return
+  activeTab.value = tab
 }
 
-async function handleLogin() {
-  await auth.login({ phone: loginForm.phone, password: loginForm.password })
-  if (!auth.error) {
-    router.push(auth.isAdmin ? { name: 'admin' } : { name: 'app' })
-  }
+function cycleTab(direction: number) {
+  const i = tabs.findIndex(t => t.key === activeTab.value)
+  const next = tabs[(i + direction + tabs.length) % tabs.length]
+  setTab(next.key)
+  nextTick(() => document.getElementById(`tab-${next.key}`)?.focus())
 }
+
+function handleSwitchTab({ tab, phone }: { tab: TabKey; phone: string }) {
+  sharedPhone.value = phone
+  setTab(tab)
+}
+
+// The forms are v-if'd so their local state resets, but auth.error lives in the
+// store and would otherwise follow the user across the tab switch.
+watch(activeTab, (tab) => {
+  auth.error = null
+  router.replace({ query: { ...route.query, tab } })
+})
 </script>
 
 <style scoped>
-.input-field {
-  width: 100%;
-  height: 3rem;
-  padding-left: 16px;
-  padding-right: 16px;
-  background: white;
-  border: 1px solid #c5c6d0;
-  border-radius: 12px;
-  font-size: 16px;
-  line-height: 24px;
-  outline: none;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-.input-field:focus {
-  border-color: #fd761a;
-  box-shadow: 0 0 0 1px #fd761a;
-}
 .tab-active {
   border-bottom: 3px solid #fd761a;
   color: #021745;

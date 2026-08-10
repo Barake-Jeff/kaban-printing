@@ -17,20 +17,40 @@ Never change a field name in an API response without updating the frontend store
 
 ## Auth responses
 
-### POST /api/auth/login → POST /api/auth/signup
+### POST /api/auth/login → POST /api/auth/register
 
 ```typescript
 // data shape inside the response envelope
 {
-  accessToken:  string,    // JWT, expires in 15 minutes
-  refreshToken: string,    // JWT, expires in 7 days
+  accessToken:  string,    // JWT, expires 1 hour
+  refreshToken: string,    // JWT, expires 30 days
   user: {
-    id:          string,
-    name:        string,
-    phone:       string,
-    houseNumber: string,   // ← camelCase, not house_number
-    estate:      string,
-    role:        'customer' | 'clerk' | 'admin',
+    id:            string,
+    name:          string,
+    phone:         string,
+    houseNumber:   string,   // camelCase — NOT house_number
+    estate:        string,
+    role:          'customer',
+    notifSms:      boolean,
+    notifWhatsapp: boolean,
+    creditBalance: number,
+    loyaltyPoints: number,
+  }
+}
+```
+
+### POST /api/admin/auth/login
+
+```typescript
+{
+  accessToken:  string,
+  refreshToken: string,
+  user: {
+    id:    string,
+    name:  string,
+    phone: string,
+    role:  'clerk' | 'admin',
+    active: boolean,
   }
 }
 ```
@@ -38,9 +58,7 @@ Never change a field name in an API response without updating the frontend store
 ### POST /api/auth/refresh
 
 ```typescript
-{
-  accessToken: string,
-}
+{ accessToken: string }
 ```
 
 ---
@@ -52,27 +70,24 @@ Never change a field name in an API response without updating the frontend store
 ```typescript
 // Returns array of:
 {
-  id:            string,           // e.g. 'JOB-1042' or UUID
+  id:            string,
   userId:        string,
-  fileName:      string | null,    // null if instruction-based job
-  fileType:      string | null,    // 'pdf', 'docx', 'jpg', etc.
-  instructions:  string | null,    // null if file-based job
+  fileName:      string | null,
+  instructions:  string | null,
   pages:         number,
   copies:        number,
   colorMode:     'bw' | 'color',
   sides:         'single' | 'double',
-  paperSize:     string,           // 'A4', 'A5', 'A3', 'Letter'
+  paperSize:     string,
   deliveryType:  'pickup' | 'delivery',
   paymentMethod: 'mpesa' | 'pay_on_pickup',
   paymentStatus: 'unpaid' | 'paid' | 'pay_on_pickup',
   mpesaRef:      string | null,
   status:        'pending' | 'printing' | 'ready' | 'delivered',
-  cost:          number,           // print cost in KES
-  deliveryFee:   number,           // 0 or 50
-  adminNotes:    string,           // empty string if none
-  notifySms:     boolean,
-  notifyWhatsapp: boolean,
-  createdAt:     string,           // ISO 8601: '2026-05-27T09:14:00Z'
+  cost:          number,
+  deliveryFee:   number,
+  adminNotes:    string | null,
+  createdAt:     string,   // ISO 8601
   updatedAt:     string,
 }
 ```
@@ -83,10 +98,9 @@ Same as above, plus:
 
 ```typescript
 {
-  // ...all job fields above...
-  customerName: string,      // joined from users table
-  houseNumber:  string,      // joined from users table
-  phone:        string,      // joined from users table
+  customerName: string,
+  houseNumber:  string,
+  phone:        string,
 }
 ```
 
@@ -98,10 +112,10 @@ Same as above, plus:
 
 ```typescript
 {
-  jobsToday:    number,    // count of jobs created today
-  pending:      number,    // count with status = 'pending'
-  completed:    number,    // count with status = 'delivered'
-  revenueToday: number,    // sum of (cost + delivery_fee) for paid jobs today
+  jobsToday:    number,
+  pending:      number,
+  completed:    number,
+  revenueToday: number,
 }
 ```
 
@@ -119,15 +133,15 @@ Same as above, plus:
   houseNumber:      string,
   phone:            string,
   totalJobs:        number,
-  totalSpent:       number,    // KES, sum of all paid jobs
-  payOnPickupCount: number,    // count of pay_on_pickup jobs
-  mpesaCount:       number,    // count of mpesa jobs
+  totalSpent:       number,
+  payOnPickupCount: number,
+  mpesaCount:       number,
 }
 ```
 
 ### GET /api/admin/customers/lookup?house=14B
 
-Returns single object from the array above, or 404 if not found.
+Returns single customer object or 404.
 
 ---
 
@@ -137,11 +151,20 @@ Returns single object from the array above, or 404 if not found.
 
 ```typescript
 {
-  fileId:    string,     // UUID saved in files table
-  fileName:  string,     // original filename
-  fileUrl:   string,     // path to original file
-  pdfUrl:    string,     // path to converted PDF
-  pageCount: number,     // actual page count from PDF parser
+  fileId:    string,
+  fileName:  string,
+  fileUrl:   string,   // presigned URL for original (1h expiry)
+  pdfUrl:    string,   // presigned URL for converted PDF (1h expiry)
+  pageCount: number,
+}
+```
+
+### GET /api/admin/jobs/:id/file
+
+```typescript
+{
+  url:      string,   // presigned download URL (1h expiry) — MinIO prefers pdf_key, falls back to file_key
+  fileName: string,
 }
 ```
 
@@ -153,18 +176,15 @@ Returns single object from the array above, or 404 if not found.
 
 Request body:
 ```typescript
-{
-  jobId: string,
-  phone: string,   // customer phone, e.g. '0712345678'
-}
+{ jobId: string, phone: string }
 ```
 
 Response:
 ```typescript
 {
-  checkoutRequestId: string,   // save this for status polling
+  checkoutRequestId: string,
   merchantRequestId: string,
-  responseCode:      string,   // '0' = request accepted
+  responseCode:      string,
   responseDesc:      string,
   customerMessage:   string,
 }
@@ -172,17 +192,84 @@ Response:
 
 ---
 
-## Notification log (for admin reports — future)
+## Staff
+
+### GET /api/admin/staff
+
+```typescript
+// Returns array of:
+{
+  id:    string,
+  name:  string,
+  phone: string,
+  role:  'clerk' | 'admin',
+  active: boolean,
+  createdAt: string,
+}
+```
+
+### POST /api/admin/staff
+
+Request body:
+```typescript
+{ name: string, phone: string, password: string, role: 'clerk' | 'admin' }
+```
+
+Response: single staff member object (above).
+
+### PATCH /api/admin/staff/:id/deactivate | /reactivate
+
+Returns updated staff member object.
+
+---
+
+## Settings
+
+### GET /api/admin/settings
 
 ```typescript
 {
-  id:         string,
-  jobId:      string,
-  channel:    'sms' | 'whatsapp',
-  trigger:    string,      // 'job_received' | 'payment_confirmed' | 'job_ready' | 'delivered'
-  phone:      string,
-  status:     'sent' | 'failed',
-  sentAt:     string,      // ISO 8601
+  business: {
+    name: string,
+    phone: string,
+    email: string,
+    address: string,
+    hours: string,
+  },
+  pricing: {
+    bwPerPage: number,
+    colorPerPage: number,
+    deliveryFee: number,
+    doubleSidedMultiplier: number,
+  },
+  notificationMatrix: {
+    jobReceived: boolean,
+    paymentConfirmed: boolean,
+    printingStarted: boolean,
+    jobReady: boolean,
+    jobDelivered: boolean,
+  }
+}
+```
+
+### PATCH /api/admin/settings
+
+Request body: partial (any subset of the above).
+
+---
+
+## Reports
+
+### GET /api/admin/reports
+
+```typescript
+{
+  dailyRevenue: Array<{ date: string, revenue: number }>,       // last 14 days
+  jobsByDayOfWeek: Array<{ day: string, count: number }>,       // Mon–Sun
+  jobsByStatus: Array<{ status: string, count: number }>,
+  avgFulfillmentHours: number | null,
+  paymentMethodSplit: Array<{ method: string, count: number }>,
+  topCustomers: Array<{ name: string, houseNumber: string, totalJobs: number, totalSpent: number }>,
 }
 ```
 
@@ -190,50 +277,44 @@ Response:
 
 ## Nuxt store → API endpoint mapping
 
-Stores live in `stores/auth.ts`, `stores/jobs.ts`, `stores/admin.ts`.
-They are auto-imported by Nuxt — no import statement needed in pages/components.
-
-| Store method                         | HTTP call                                    |
-|--------------------------------------|----------------------------------------------|
-| `useAuthStore().login()`             | POST /api/auth/login                         |
-| `useAuthStore().signup()`            | POST /api/auth/signup                        |
-| `useAuthStore().logout()`            | POST /api/auth/logout                        |
-| `useJobsStore().fetchMyJobs()`       | GET /api/jobs/my                             |
-| `useJobsStore().submitJob()`         | POST /api/jobs                               |
-| `useJobsStore().initiateMpesa(jobId)`| POST /api/payments/mpesa/stk                 |
-| `useAdminStore().fetchQueue()`       | GET /api/admin/jobs                          |
-| `useAdminStore().updateJobStatus()`  | PATCH /api/admin/jobs/:id/status             |
-| `useAdminStore().markAsPaid(id)`     | PATCH /api/payments/:jobId/pickup            |
-| `useAdminStore().saveNotes()`        | PATCH /api/admin/jobs/:id/notes              |
-| `useAdminStore().cancelJob(id)`      | DELETE /api/admin/jobs/:id                   |
-| `useAdminStore().lookupCustomer()`   | GET /api/admin/customers/lookup?house={house}|
+| Store method                             | HTTP call                                      |
+|------------------------------------------|------------------------------------------------|
+| `useAuthStore().login()`                 | POST /api/auth/login                           |
+| `useAuthStore().register()`              | POST /api/auth/register                        |
+| `useAuthStore().adminLogin()`            | POST /api/admin/auth/login                     |
+| `useAuthStore().logout()`                | POST /api/auth/logout                          |
+| `useJobsStore().fetchMyJobs()`           | GET /api/jobs/my                               |
+| `useJobsStore().submitJob()`             | POST /api/jobs                                 |
+| `useJobsStore().initiateMpesa(jobId)`    | POST /api/payments/mpesa/stk                   |
+| `useAdminStore().fetchQueue()`           | GET /api/admin/jobs                            |
+| `useAdminStore().fetchStats()`           | GET /api/admin/stats                           |
+| `useAdminStore().fetchCustomers()`       | GET /api/admin/customers                       |
+| `useAdminStore().updateJobStatus()`      | PATCH /api/admin/jobs/:id/status               |
+| `useAdminStore().markAsPaid(id)`         | PATCH /api/admin/jobs/:id/payment              |
+| `useAdminStore().saveNotes()`            | PATCH /api/admin/jobs/:id/notes                |
+| `useAdminStore().cancelJob(id)`          | DELETE /api/admin/jobs/:id                     |
+| `useAdminStore().lookupCustomer()`       | GET /api/admin/customers/lookup?house={house}  |
+| `useAdminStore().fetchJobFileUrl(id)`    | GET /api/admin/jobs/:id/file                   |
+| `useAdminStaff().fetchStaff()`          | GET /api/admin/staff                           |
+| `useAdminStaff().createStaff(dto)`      | POST /api/admin/staff                          |
+| `useAdminStaff().deactivateStaff(id)`   | PATCH /api/admin/staff/:id/deactivate          |
+| `useAdminStaff().reactivateStaff(id)`   | PATCH /api/admin/staff/:id/reactivate          |
+| `useAdminSettings().fetchSettings()`    | GET /api/admin/settings                        |
+| `useAdminSettings().saveSettings(dto)`  | PATCH /api/admin/settings                      |
+| `useAdminReports().fetchReportData()`   | GET /api/admin/reports                         |
 
 ---
 
-## How to connect the frontend to the backend
+## How the frontend calls the API
 
-When the backend is ready, replace the dummy store methods with `$fetch` calls.
-
-**Step 1 — Add API base URL to `nuxt.config.ts`:**
-
-```typescript
-export default defineNuxtConfig({
-  runtimeConfig: {
-    public: {
-      apiBase: process.env.NUXT_PUBLIC_API_BASE ?? 'http://localhost:3000/api',
-    },
-  },
-})
-```
-
-**Step 2 — Create `composables/useApi.ts`:**
+All authenticated calls go through `composables/useApi.ts`:
 
 ```typescript
 export function useApi() {
   const config = useRuntimeConfig()
 
   return $fetch.create({
-    baseURL: config.public.apiBase,
+    baseURL: config.public.apiBase,   // NUXT_PUBLIC_API_BASE env var
     onRequest({ options }) {
       const token = localStorage.getItem('accessToken')
       if (token) {
@@ -244,7 +325,7 @@ export function useApi() {
       if (response.status === 401) {
         const refreshToken = localStorage.getItem('refreshToken')
         if (refreshToken) {
-          const data = await $fetch<{ data: { accessToken: string } }>(
+          const data = await $fetch<any>(
             '/auth/refresh',
             { baseURL: config.public.apiBase, method: 'POST', body: { refreshToken } }
           )
@@ -256,60 +337,34 @@ export function useApi() {
 }
 ```
 
-**Step 3 — Replace dummy store methods one at a time:**
-
-```typescript
-// Before (dummy):
-async function fetchMyJobs() {
-  loading.value = true
-  await delay(600)
-  jobs.value = [...JOBS]
-  loading.value = false
-}
-
-// After (real API):
-async function fetchMyJobs() {
-  loading.value = true
-  const api = useApi()
-  try {
-    const res = await api<{ data: Job[] }>('/jobs/my')
-    jobs.value = res.data   // unwrap the envelope
-  } finally {
-    loading.value = false
-  }
-}
-```
-
 ---
 
-## Field name cross-reference (frontend dummy.js → backend response)
+## Field name cross-reference
 
-Every field in this table must match exactly between dummy.js and the backend.
-
-| dummy.js field      | Backend response field  | MySQL column        |
-|---------------------|-------------------------|---------------------|
-| `id`                | `id`                    | `id`                |
-| `userId`            | `userId`                | `user_id`           |
-| `fileName`          | `fileName`              | `file_name`         |
-| `fileType`          | `fileType`              | (derived from mime) |
-| `instructions`      | `instructions`          | `instructions`      |
-| `pages`             | `pages`                 | `pages`             |
-| `copies`            | `copies`                | `copies`            |
-| `colorMode`         | `colorMode`             | `color_mode`        |
-| `sides`             | `sides`                 | `sides`             |
-| `paperSize`         | `paperSize`             | `paper_size`        |
-| `deliveryType`      | `deliveryType`          | `delivery_type`     |
-| `paymentMethod`     | `paymentMethod`         | `payment_method`    |
-| `paymentStatus`     | `paymentStatus`         | `payment_status`    |
-| `mpesaRef`          | `mpesaRef`              | `mpesa_ref`         |
-| `status`            | `status`                | `status`            |
-| `cost`              | `cost`                  | `cost`              |
-| `deliveryFee`       | `deliveryFee`           | `delivery_fee`      |
-| `adminNotes`        | `adminNotes`            | `admin_notes`       |
-| `notifySms`         | `notifySms`             | `notif_sms`         |
-| `notifyWhatsapp`    | `notifyWhatsapp`        | `notif_whatsapp`    |
-| `createdAt`         | `createdAt`             | `created_at`        |
-| `updatedAt`         | `updatedAt`             | `updated_at`        |
-| `customerName`      | `customerName`          | (joined: users.name)|
-| `houseNumber`       | `houseNumber`           | `house_number`      |
-| `phone`             | `phone`                 | `phone`             |
+| Frontend field      | Backend response field  | MySQL column             |
+|---------------------|-------------------------|--------------------------|
+| `id`                | `id`                    | `id`                     |
+| `userId`            | `userId`                | `user_id`                |
+| `fileName`          | `fileName`              | `file_name`              |
+| `instructions`      | `instructions`          | `instructions`           |
+| `pages`             | `pages`                 | `pages`                  |
+| `copies`            | `copies`                | `copies`                 |
+| `colorMode`         | `colorMode`             | `color_mode`             |
+| `sides`             | `sides`                 | `sides`                  |
+| `paperSize`         | `paperSize`             | `paper_size`             |
+| `deliveryType`      | `deliveryType`          | `delivery_type`          |
+| `paymentMethod`     | `paymentMethod`         | `payment_method`         |
+| `paymentStatus`     | `paymentStatus`         | `payment_status`         |
+| `mpesaRef`          | `mpesaRef`              | `mpesa_ref`              |
+| `status`            | `status`                | `status`                 |
+| `cost`              | `cost`                  | `cost`                   |
+| `deliveryFee`       | `deliveryFee`           | `delivery_fee`           |
+| `adminNotes`        | `adminNotes`            | `admin_notes`            |
+| `notifSms`          | `notifSms`              | `notif_sms`              |
+| `notifWhatsapp`     | `notifWhatsapp`         | `notif_whatsapp`         |
+| `createdAt`         | `createdAt`             | `created_at`             |
+| `updatedAt`         | `updatedAt`             | `updated_at`             |
+| `customerName`      | `customerName`          | joined: `users.name`     |
+| `houseNumber`       | `houseNumber`           | `house_number`           |
+| `phone`             | `phone`                 | `phone`                  |
+| `active`            | `active`                | `active`                 |

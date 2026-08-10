@@ -1,130 +1,142 @@
 <template>
-  <main class="pt-20 px-margin-mobile flex flex-col gap-xl">
+  <main class="pt-16 px-margin-mobile flex flex-col gap-xl pb-8">
 
     <!-- Greeting -->
-    <header class="flex flex-col">
-      <h1 class="font-headline-lg-mobile text-headline-lg-mobile text-primary font-medium">
+    <section class="mt-sm">
+      <h1 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface font-bold">
         Hello {{ firstName }}
       </h1>
-      <p class="font-label-bold text-label-bold text-secondary">
+      <p class="font-label-bold text-label-bold" style="color: #F97316;">
         House {{ auth.user?.houseNumber }}
       </p>
-    </header>
-
-    <!-- New print job CTA -->
-    <section>
-      <NuxtLink
-        :to="{ name: 'app-new-job' }"
-        class="w-full h-[48px] rounded-xl font-headline-md text-headline-md flex items-center justify-center gap-sm active:scale-[0.98] transition-all text-on-primary"
-        style="background-color: #F97316;"
-      >
-        <span class="material-symbols-outlined">print</span>
-        <span class="font-medium">New print job +</span>
-      </NuxtLink>
     </section>
 
-    <!-- Job list -->
-    <section class="flex flex-col gap-md">
-      <h2 class="font-headline-md text-headline-md text-primary font-medium">Your jobs</h2>
-
-      <!-- Loading state -->
-      <div v-if="jobs.loading" class="flex flex-col gap-md">
-        <div
-          v-for="n in 3" :key="n"
-          class="bg-surface-container-low rounded-xl p-md h-28 animate-pulse"
-        />
+    <!-- Active / recent spotlight -->
+    <section>
+      <div class="flex justify-between items-center mb-md">
+        <h2 class="font-label-bold text-label-bold text-on-surface-variant uppercase">
+          {{ hasActiveJobs ? 'Active orders' : 'Recent orders' }}
+        </h2>
       </div>
 
-      <!-- Empty state -->
-      <div
-        v-else-if="jobs.jobs.length === 0"
-        class="bg-surface-container-low rounded-xl p-lg text-center"
-      >
+      <div v-if="jobs.loading" class="flex flex-col gap-md">
+        <div v-for="n in 2" :key="n" class="bg-surface-container rounded-xl p-md h-24 animate-pulse" />
+      </div>
+
+      <div v-else-if="spotlightJobs.length === 0" class="bg-surface-container rounded-xl p-lg text-center">
         <span class="material-symbols-outlined text-outline text-4xl">inbox</span>
         <p class="font-body-sm text-body-sm text-on-surface-variant mt-sm">
           No print jobs yet. Tap "New print job" to get started.
         </p>
       </div>
 
-      <!-- Job cards -->
       <div v-else class="flex flex-col gap-md">
-        <NuxtLink
-          v-for="job in jobs.jobs"
+        <div
+          v-for="job in spotlightJobs"
           :key="job.id"
-          :to="{ name: 'app-jobs-id', params: { id: job.id } }"
-          @click="jobs.setActiveJob(job)"
-          custom
-          v-slot="{ navigate, href }"
+          @click="goToJob(job)"
+          class="bg-surface-container rounded-xl p-md flex flex-col gap-sm cursor-pointer active:scale-[0.98] transition-transform"
         >
-          <article
-            :href="href"
-            @click="navigate"
-            @touchstart="touching = job.id"
-            @touchend="touching = null"
-            :class="[
-              'rounded-xl p-md flex flex-col gap-sm cursor-pointer transition-colors',
-              touching === job.id ? 'bg-surface-container-high' : 'bg-surface-container-low'
-            ]"
-          >
-            <!-- Top row: reference + status badge -->
-            <div class="flex justify-between items-start">
-              <span class="font-label-bold text-label-bold text-on-surface-variant">
-                {{ job.id }}
-              </span>
-              <span
-                :class="['font-status-badge text-status-badge px-2 py-1 rounded-[4px] uppercase tracking-wider text-on-primary', statusBg(job.status)]"
-              >
-                {{ statusLabel(job.status) }}
-              </span>
-            </div>
-
-            <!-- File name / instruction -->
-            <div>
-              <h3 class="font-headline-md text-headline-md text-primary font-bold truncate">
+          <div class="flex justify-between items-start">
+            <div class="flex-1 min-w-0 mr-sm">
+              <p class="font-label-bold text-label-bold text-on-surface truncate">
                 {{ job.fileName ?? 'Custom instructions' }}
-              </h3>
-              <div class="flex flex-wrap gap-xs mt-xs">
-                <span class="bg-surface-container-highest text-on-surface-variant font-label-bold text-[10px] px-2 py-0.5 rounded-full">
-                  {{ job.pages }} {{ job.pages === 1 ? 'Page' : 'Pages' }}
-                </span>
-                <span class="bg-surface-container-highest text-on-surface-variant font-label-bold text-[10px] px-2 py-0.5 rounded-full">
-                  {{ job.colorMode === 'bw' ? 'B&W' : 'Color' }}
-                </span>
-                <span class="bg-surface-container-highest text-on-surface-variant font-label-bold text-[10px] px-2 py-0.5 rounded-full">
-                  {{ job.sides === 'single' ? 'Single-sided' : 'Double-sided' }}
-                </span>
-              </div>
+              </p>
+              <p class="font-body-sm text-body-sm text-on-surface-variant">{{ job.id }}</p>
             </div>
+            <span :class="statusBadgeClass(job.status)" class="text-[10px] font-bold px-2 py-1 rounded-full uppercase flex-shrink-0">
+              {{ statusLabel(job.status) }}
+            </span>
+          </div>
 
-            <!-- Timestamp -->
-            <div class="flex items-center gap-xs text-on-surface-variant mt-xs">
-              <span class="material-symbols-outlined text-[16px]">{{ timestampIcon(job.status) }}</span>
-              <span class="font-body-sm text-body-sm">{{ formatDate(job.createdAt) }}</span>
-            </div>
-          </article>
-        </NuxtLink>
+          <!-- Compact 5-step progress tracker -->
+          <div class="flex items-center mt-xs">
+            <template v-for="(s, i) in progressSteps" :key="s.key">
+              <div
+                :class="[
+                  'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0',
+                  stepIndex(job.status) > i
+                    ? 'bg-secondary-container'
+                    : stepIndex(job.status) === i
+                    ? 'bg-primary'
+                    : 'bg-surface-container-high',
+                ]"
+              >
+                <span
+                  v-if="stepIndex(job.status) > i"
+                  class="material-symbols-outlined text-white"
+                  style="font-size: 11px; font-variation-settings: 'wght' 700;"
+                >check</span>
+                <span
+                  v-else
+                  class="material-symbols-outlined"
+                  :class="stepIndex(job.status) === i ? 'text-on-primary' : 'text-on-surface-variant'"
+                  style="font-size: 11px;"
+                >{{ s.icon }}</span>
+              </div>
+              <div
+                v-if="i < progressSteps.length - 1"
+                :class="['h-[2px] flex-1', stepIndex(job.status) > i ? 'bg-secondary-container' : 'bg-outline-variant']"
+              ></div>
+            </template>
+          </div>
+        </div>
       </div>
     </section>
 
-    <!-- Stats bento -->
-    <section class="grid grid-cols-2 gap-gutter mb-xl">
-      <div class="bg-primary-container p-md rounded-xl flex flex-col gap-xs">
-        <span class="material-symbols-outlined text-on-primary-container">account_balance_wallet</span>
-        <span class="text-on-primary-container font-headline-md text-headline-md font-bold">
-          KES {{ creditBalance }}
-        </span>
-        <span class="text-on-primary-container/70 font-label-bold text-[10px] uppercase tracking-wider">
-          Credit balance
-        </span>
+    <!-- New print job CTA -->
+    <NuxtLink to="/app/new-job" class="block">
+      <button
+        class="w-full h-12 rounded-xl text-on-primary font-label-bold text-label-bold uppercase tracking-widest flex items-center justify-center gap-sm active:scale-[0.98] transition-transform"
+        style="background-color: #F97316;"
+      >
+        <span class="material-symbols-outlined text-[20px]">add</span>
+        New print job
+      </button>
+    </NuxtLink>
+
+    <!-- Stats bar -->
+    <section class="grid grid-cols-3 gap-sm">
+      <div class="bg-surface-container rounded-xl p-sm flex flex-col items-center gap-xs">
+        <span class="font-headline-md text-headline-md text-primary font-bold">{{ jobs.jobsThisMonth }}</span>
+        <span class="font-label-bold text-[10px] text-on-surface-variant text-center uppercase leading-tight">Jobs this month</span>
       </div>
-      <div class="bg-surface-container p-md rounded-xl flex flex-col gap-xs">
-        <span class="material-symbols-outlined text-primary">auto_awesome</span>
-        <span class="text-primary font-headline-md text-headline-md font-bold">
-          {{ loyaltyPoints }}
-        </span>
-        <span class="text-on-surface-variant font-label-bold text-[10px] uppercase tracking-wider">
-          Loyalty points
-        </span>
+      <!-- <div class="bg-surface-container rounded-xl p-sm flex flex-col items-center gap-xs">
+        <span class="font-headline-md text-headline-md text-primary font-bold">{{ auth.user?.loyaltyPoints ?? 0 }}</span>
+        <span class="font-label-bold text-[10px] text-on-surface-variant text-center uppercase leading-tight">Loyalty pts</span>
+      </div>
+      <div class="bg-surface-container rounded-xl p-sm flex flex-col items-center gap-xs">
+        <span class="font-headline-md text-headline-md text-primary font-bold">{{ auth.user?.creditBalance ?? 0 }}</span>
+        <span class="font-label-bold text-[10px] text-on-surface-variant text-center uppercase leading-tight">Credit KES</span>
+      </div> -->
+    </section>
+
+    <!-- Recent orders (only shown when spotlight is showing active jobs) -->
+    <section v-if="hasActiveJobs && recentJobs.length > 0">
+      <div class="flex justify-between items-center mb-md">
+        <h2 class="font-label-bold text-label-bold text-on-surface-variant uppercase">Recent orders</h2>
+        <NuxtLink to="/app/orders" class="font-label-bold text-label-bold" style="color: #F97316;">See all →</NuxtLink>
+      </div>
+      <div class="flex flex-col gap-md">
+        <div
+          v-for="job in recentJobs"
+          :key="job.id"
+          @click="goToJob(job)"
+          class="bg-surface-container rounded-xl p-md flex justify-between items-center cursor-pointer active:scale-[0.98] transition-transform"
+        >
+          <div class="flex-1 min-w-0 mr-sm">
+            <p class="font-label-bold text-label-bold text-on-surface truncate">
+              {{ job.fileName ?? 'Custom instructions' }}
+            </p>
+            <p class="font-body-sm text-body-sm text-on-surface-variant">{{ job.id }} · {{ formatDate(job.createdAt) }}</p>
+          </div>
+          <div class="flex flex-col items-end gap-xs flex-shrink-0">
+            <span :class="statusBadgeClass(job.status)" class="text-[10px] font-bold px-2 py-1 rounded-full uppercase">
+              {{ statusLabel(job.status) }}
+            </span>
+            <span class="font-body-sm text-body-sm text-on-surface-variant">KES {{ job.cost + job.deliveryFee }}</span>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -132,73 +144,61 @@
 </template>
 
 <script setup lang="ts">
-definePageMeta({
-  layout: 'customer',
-  middleware: 'auth',
-  requiresAuth: true,
-  role: 'customer',
-})
+definePageMeta({ layout: 'customer', middleware: 'auth', requiresAuth: true, role: 'customer' })
 
-const auth = useAuthStore()
-const jobs = useJobsStore()
+const auth   = useAuthStore()
+const jobs   = useJobsStore()
+const router = useRouter()
 
-const touching = ref<string | null>(null)
+onMounted(() => { if (!jobs.jobs.length) jobs.fetchMyJobs() })
 
-const creditBalance  = ref(0)
-const loyaltyPoints  = ref(jobs.jobs.length)
+const firstName     = computed(() => auth.user?.name?.split(' ')[0] ?? 'there')
+const hasActiveJobs = computed(() => jobs.activeJobs.length > 0)
 
-onMounted(() => jobs.fetchMyJobs())
-
-const firstName = computed(() =>
-  auth.user?.name?.split(' ')[0] ?? 'there'
+const spotlightJobs = computed(() =>
+  hasActiveJobs.value ? jobs.activeJobs.slice(0, 3) : jobs.jobs.slice(0, 3)
 )
 
-function statusBg(status: string): string {
-  const map: Record<string, string> = {
-    pending:   'bg-secondary-container',
-    printing:  'bg-blue-600',
-    ready:     'bg-green-600',
-    delivered: 'bg-outline',
-  }
-  return map[status] ?? 'bg-outline'
+const recentJobs = computed(() => jobs.jobs.slice(0, 3))
+
+const progressSteps = [
+  { key: 'received',  icon: 'inbox'          },
+  { key: 'paid',      icon: 'payments'       },
+  { key: 'printing',  icon: 'print'          },
+  { key: 'ready',     icon: 'inventory_2'    },
+  { key: 'delivered', icon: 'local_shipping' },
+]
+
+function stepIndex(status: string) {
+  const s = status
+  if (s === 'delivered') return 4
+  if (s === 'ready')     return 3
+  if (s === 'printing')  return 2
+  return 0
 }
 
-function statusLabel(status: string): string {
-  const map: Record<string, string> = {
-    pending:   'Pending',
-    printing:  'Printing',
-    ready:     'Ready',
-    delivered: 'Delivered',
-  }
+function statusLabel(status: string) {
+  const map: Record<string, string> = { pending: 'Queued', printing: 'Printing', ready: 'Ready', delivered: 'Complete' }
   return map[status] ?? status
 }
 
-function timestampIcon(status: string): string {
+function statusBadgeClass(status: string) {
   const map: Record<string, string> = {
-    pending:   'schedule',
-    printing:  'schedule',
-    ready:     'history',
-    delivered: 'calendar_today',
+    pending:   'bg-yellow-100 text-yellow-700',
+    printing:  'bg-blue-100 text-blue-700',
+    ready:     'bg-green-100 text-green-700',
+    delivered: 'bg-gray-100 text-gray-600',
   }
-  return map[status] ?? 'schedule'
+  return map[status] ?? 'bg-gray-100 text-gray-500'
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string) {
   if (!iso) return ''
-  const date  = new Date(iso)
-  const today = new Date()
-  const yesterday = new Date()
-  yesterday.setDate(today.getDate() - 1)
+  return new Date(iso).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' })
+}
 
-  const sameDay = (a: Date, b: Date) =>
-    a.getDate() === b.getDate() &&
-    a.getMonth() === b.getMonth() &&
-    a.getFullYear() === b.getFullYear()
-
-  if (sameDay(date, today)) {
-    return 'Today, ' + date.toLocaleTimeString('en-KE', { hour: '2-digit', minute: '2-digit' })
-  }
-  if (sameDay(date, yesterday)) return 'Yesterday'
-  return date.toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' })
+function goToJob(job: any) {
+  jobs.setActiveJob(job)
+  router.push(`/app/orders/${job.id}`)
 }
 </script>

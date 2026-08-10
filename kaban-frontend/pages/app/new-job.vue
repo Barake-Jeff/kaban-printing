@@ -164,20 +164,70 @@
           </div>
         </div>
 
+        <!-- Word conversion accuracy note -->
+        <div v-if="isWordDoc" class="mt-md flex items-start gap-sm bg-surface-container-low p-md rounded-lg">
+          <span class="material-symbols-outlined text-on-surface-variant text-[20px] flex-shrink-0 mt-0.5">info</span>
+          <p class="font-body-sm text-body-sm text-on-surface-variant font-normal">
+            We convert Word documents to PDF for printing, so spacing or line breaks may shift very slightly. Please check the preview before confirming your order.
+          </p>
+        </div>
+
         <!-- Document preview -->
-        <div class="mt-xl relative rounded-lg overflow-hidden bg-surface-container-high aspect-[3/2] flex items-center justify-center">
+        <div class="mt-xl rounded-lg overflow-hidden bg-surface-container-high border border-outline-variant/40">
+
+          <!-- Instructions-only job: nothing to preview -->
+          <div
+            v-if="!selectedFile"
+            class="aspect-[3/2] flex flex-col items-center justify-center gap-sm text-on-surface-variant"
+          >
+            <span class="material-symbols-outlined text-[40px]">description</span>
+            <p class="font-body-sm text-body-sm">Printed from your instructions — no document attached</p>
+          </div>
+
+          <!-- Fetching the preview URL -->
+          <div v-else-if="previewLoading" class="aspect-[3/2] flex items-center justify-center">
+            <span class="material-symbols-outlined text-on-surface-variant text-[32px] animate-spin">progress_activity</span>
+          </div>
+
+          <!-- Image files render directly -->
           <img
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuDyX81hZCZCCbGJjWL52Nh0S03AAlIIssBjKUdnFoPqEXq522MNi7j9iuas7ItIbQY0T9AKDE00QDBpj6HVBh09u2jcfH-lYkQdW-SqDwmCzDYvheUp4XeCH5KzVDaNfXYU2SKvJ5F4QpPeX4a3QX_7MeCCRBtCofDBHzoQ9L5PEzhLAPLNHH4DQbIAlVLROlL0WfnAlxjIq0-KrI1CSveLdpN6ZUXlo77sSCdI3CUdJiRgjg4ThCfIr8oeZBqy_AOWlg3BSycH4B0"
-            alt="Paper stack preview"
-            class="w-full h-full object-cover mix-blend-multiply opacity-80"
+            v-else-if="previewUrl && fileMimeType?.startsWith('image/')"
+            :src="previewUrl"
+            :alt="selectedFile.name"
+            class="w-full aspect-[3/2] object-contain bg-surface-container-highest"
           />
-          <div class="absolute inset-0 flex items-center justify-center">
-            <div class="bg-on-primary/90 p-md rounded-lg border border-outline-variant flex gap-sm items-center">
-              <span class="material-symbols-outlined text-secondary-container" style="font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;">description</span>
-              <span class="font-label-bold text-label-bold text-primary">
-                {{ selectedFile ? selectedFile.name : 'Previewing document.pdf' }}
-              </span>
-            </div>
+
+          <!-- PDFs and converted Word docs: the backend always hands back a PDF -->
+          <iframe
+            v-else-if="previewUrl"
+            :src="previewUrl"
+            :title="selectedFile.name"
+            class="w-full aspect-[3/2] border-0"
+          ></iframe>
+
+          <!-- Preview couldn't be generated — non-fatal, the upload itself succeeded -->
+          <div
+            v-else
+            class="aspect-[3/2] flex flex-col items-center justify-center gap-sm text-on-surface-variant p-md text-center"
+          >
+            <span class="material-symbols-outlined text-[32px]">description</span>
+            <p class="font-body-sm text-body-sm">Preview unavailable — your file uploaded fine</p>
+          </div>
+
+          <!-- Filename bar + escape hatch for browsers that render inline PDFs poorly -->
+          <div
+            v-if="selectedFile"
+            class="flex items-center justify-between gap-sm px-md py-sm bg-on-primary/90 border-t border-outline-variant"
+          >
+            <span class="font-label-bold text-label-bold text-primary truncate">{{ selectedFile.name }}</span>
+            <a
+              v-if="previewUrl"
+              :href="previewUrl"
+              target="_blank"
+              rel="noopener"
+              class="material-symbols-outlined text-secondary-container flex-shrink-0"
+              aria-label="Open full document in a new tab"
+            >open_in_new</a>
           </div>
         </div>
       </section>
@@ -242,7 +292,9 @@
             </div>
             <div class="flex-grow">
               <h3 class="font-headline-md text-headline-md text-primary-container font-bold">Delivery</h3>
-              <p class="font-body-sm text-body-sm text-on-surface-variant font-normal">Delivered to your house — KES 50 fee</p>
+              <p class="font-body-sm text-body-sm text-on-surface-variant font-normal">
+                Delivered to your house — {{ jobs.pricing ? `KES ${jobs.pricing.deliveryFee} fee` : 'fee applies' }}
+              </p>
             </div>
             <span
               v-if="form.deliveryType === 'delivery'"
@@ -366,11 +418,11 @@
       </div>
       <button
         @click="handleNext"
-        :disabled="jobs.loading"
+        :disabled="jobs.loading || uploadLoading"
         class="w-full h-12 text-on-primary font-label-bold text-label-bold rounded-lg uppercase tracking-wider active:scale-[0.98] transition-all disabled:opacity-60"
         style="background-color: #F97316;"
       >
-        Next
+        {{ uploadLoading ? 'Uploading…' : 'Next' }}
       </button>
     </div>
 
@@ -378,7 +430,6 @@
 </template>
 
 <script setup lang="ts">
-import { calculateCost } from '~/data/dummy'
 import type { SubmitJobPayload, ColorMode, SideMode } from '~/types'
 
 definePageMeta({
@@ -387,12 +438,21 @@ definePageMeta({
   role: 'customer',
 })
 
-const router       = useRouter()
-const jobs         = useJobsStore()
-const step         = ref(0)
-const stepError    = ref('')
-const fileInputRef = ref<HTMLInputElement | null>(null)
-const selectedFile = ref<File | null>(null)
+const router         = useRouter()
+const jobs           = useJobsStore()
+const step           = ref(0)
+const stepError      = ref('')
+const fileInputRef   = ref<HTMLInputElement | null>(null)
+const selectedFile   = ref<File | null>(null)
+const fileId         = ref<string | null>(null)
+const uploadLoading  = ref(false)
+const fileMimeType   = ref<string | null>(null)
+const previewUrl     = ref<string | null>(null)
+const previewLoading = ref(false)
+
+// Pricing is admin-configured (see GET /jobs/pricing) — fetch once up front so
+// it's ready well before the user reaches the cost estimate on step 2.
+onMounted(() => { jobs.fetchPricing() })
 
 const stepLabels = ['Upload', 'Settings', 'Delivery', 'Summary']
 
@@ -416,15 +476,21 @@ const sideOpts: Array<{ val: SideMode; label: string }> = [
   { val: 'double', label: 'Double sided' },
 ]
 
-const costEstimate = computed(() =>
-  calculateCost({
-    pages:        form.pages || 1,
-    copies:       form.copies,
-    colorMode:    form.colorMode,
-    sides:        form.sides,
-    deliveryType: form.deliveryType,
-  })
-)
+const isWordDoc = computed(() => /\.docx?$/i.test(form.fileName ?? ''))
+
+// Server-sourced (jobs.pricing) — never hardcode these, the admin can change
+// them at any time via /admin/settings and this must track that live.
+const costEstimate = computed(() => {
+  const pricing = jobs.pricing
+  if (!pricing) return { printCost: 0, deliveryFee: 0, total: 0 }
+
+  const pages       = form.pages || 1
+  const perPage     = form.colorMode === 'color' ? pricing.colorPerPage : pricing.bwPerPage
+  const sidesMult   = form.sides === 'double' ? pricing.doubleSidedMultiplier : 1
+  const printCost   = Math.round(pages * form.copies * perPage * sidesMult)
+  const deliveryFee = form.deliveryType === 'delivery' ? pricing.deliveryFee : 0
+  return { printCost, deliveryFee, total: printCost + deliveryFee }
+})
 
 function triggerFileInput() { fileInputRef.value?.click() }
 
@@ -432,6 +498,9 @@ function handleFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) return
   selectedFile.value = file
+  fileId.value = null // reset so it gets uploaded on next
+  fileMimeType.value = null
+  previewUrl.value = null
   form.fileName = file.name
   form.pages = file.type === 'application/pdf'
     ? Math.max(1, Math.round(file.size / 51200))
@@ -450,12 +519,61 @@ function handleBack() {
 
 async function handleNext() {
   stepError.value = ''
-  if (step.value === 0 && !selectedFile.value && !form.instructions.trim()) {
-    stepError.value = 'Please upload a file or enter print instructions.'
+
+  if (step.value === 0) {
+    if (!selectedFile.value && !form.instructions.trim()) {
+      stepError.value = 'Please upload a file or enter print instructions.'
+      return
+    }
+
+    // Print settings on the next step need real prices, not a stale/empty guess.
+    if (!jobs.pricing) {
+      try {
+        await jobs.fetchPricing()
+      } catch {
+        stepError.value = 'Could not load pricing. Check your connection and try again.'
+        return
+      }
+    }
+
+    // Upload file to backend if one is selected and not yet uploaded
+    if (selectedFile.value && !fileId.value) {
+      uploadLoading.value = true
+      try {
+        const api      = useApi()
+        const formData = new FormData()
+        formData.append('file', selectedFile.value)
+        const res = await api<any>('/files/upload', { method: 'POST', body: formData })
+        fileId.value       = res.data.fileId
+        form.fileName      = res.data.fileName
+        form.pages         = res.data.pageCount
+        fileMimeType.value = res.data.mimeType
+      } catch (e: any) {
+        stepError.value = e?.data?.message ?? 'File upload failed. Please try again.'
+        uploadLoading.value = false
+        return
+      }
+      uploadLoading.value = false
+
+      // Best-effort: a broken preview shouldn't block a successful upload.
+      previewLoading.value = true
+      try {
+        const api = useApi()
+        const urlRes = await api<any>(`/files/${fileId.value}`)
+        previewUrl.value = urlRes.data.url
+      } catch {
+        previewUrl.value = null
+      } finally {
+        previewLoading.value = false
+      }
+    }
+    step.value++
     return
   }
+
   if (step.value < 3) { step.value++; return }
-  const job = await jobs.submitJob({ ...form })
+
+  const job = await jobs.submitJob({ ...form, fileId: fileId.value ?? undefined } as any)
   if (job) router.push({ name: 'app-payment' })
 }
 </script>

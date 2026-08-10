@@ -104,6 +104,15 @@
               <span class="material-symbols-outlined text-green-600" style="font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;">check_circle</span>
               <p class="font-body-sm text-body-sm text-green-700 font-semibold">Payment confirmed! Your job is in the queue.</p>
             </div>
+
+            <!-- Error state -->
+            <div v-if="mpesaState === 'error'" class="flex flex-col gap-sm">
+              <p class="font-body-sm text-body-sm text-red-600 text-center">Payment failed. Please try again.</p>
+              <button
+                @click="mpesaState = 'idle'"
+                class="w-full h-10 border border-outline rounded-lg font-label-bold text-label-bold text-on-surface active:scale-95 transition-transform"
+              >Try again</button>
+            </div>
           </div>
         </div>
 
@@ -191,21 +200,25 @@ const auth   = useAuthStore()
 const jobs   = useJobsStore()
 
 const selectedPayment = ref<'mpesa' | 'pickup'>('mpesa')
-const mpesaState      = ref<'idle' | 'waiting' | 'success'>('idle')
+const mpesaState      = ref<'idle' | 'waiting' | 'success' | 'error'>('idle')
 
 const job = computed(() => jobs.activeJob)
 
 async function payMpesa() {
   mpesaState.value = 'waiting'
-  await jobs.initiateMpesa(job.value?.id)
-  mpesaState.value = 'success'
-  setTimeout(() => {
-    router.push({ name: 'app-jobs-id', params: { id: job.value?.id } })
-  }, 1800)
+  const result = await jobs.initiateMpesa(job.value?.id)
+  if (result.success) {
+    mpesaState.value = 'success'
+    setTimeout(() => {
+      router.push({ name: 'app-orders-id', params: { id: job.value?.id } })
+    }, 1800)
+  } else {
+    mpesaState.value = 'error'
+  }
 }
 
 function payOnPickup() {
-  router.push({ name: 'app-jobs-id', params: { id: job.value?.id } })
+  router.push({ name: 'app-orders-id', params: { id: job.value?.id } })
 }
 </script>
 

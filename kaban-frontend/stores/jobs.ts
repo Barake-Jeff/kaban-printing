@@ -1,71 +1,164 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
-import { JOBS, calculateCost } from '@/data/dummy'
-import type { Job, SubmitJobPayload } from '~/types'
+import { ref, computed } from 'vue'
+import type { Job, Pricing, SubmitJobPayload } from '~/types'
 
 export const useJobsStore = defineStore('jobs', () => {
-  const jobs = ref<Job[]>([...JOBS])
-  const loading = ref(false)
+  const jobs      = ref<Job[]>([])
+  const loading   = ref(false)
   const activeJob = ref<Job | null>(null)
+  const error     = ref<string | null>(null)
+  // Admin-configured, fetched once and reused — see GET /jobs/pricing.
+  const pricing   = ref<Pricing | null>(null)
 
-  // Replace with: axios.get('/jobs/my') when NestJS is ready
+  const activeJobs = computed(() =>
+    jobs.value.filter(j => ['pending', 'printing', 'ready'].includes(j.status))
+  )
+
+  const jobsThisMonth = computed(() => {
+    const now = new Date()
+    return jobs.value.filter(j => {
+      const d = new Date(j.createdAt)
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+    }).length
+  })
+
+  const totalSpent = computed(() =>
+    jobs.value.reduce((sum, j) => sum + (j.paymentStatus === 'paid' ? (j.cost + j.deliveryFee) : 0), 0)
+  )
+
   async function fetchMyJobs() {
     loading.value = true
-    await delay(600)
-    jobs.value = [...JOBS]
-    loading.value = false
+    error.value   = null
+    try {
+      const api = useApi()
+      const res = await api<any>('/jobs/my-jobs', { params: { page: 1, size: 50 } })
+      jobs.value = res.data?.jobs ?? []
+    } catch (e: any) {
+      error.value = e?.data?.message ?? 'Failed to load jobs'
+    } finally {
+      loading.value = false
+    }
   }
 
-  // Replace with: axios.post('/jobs', payload)
+  /**
+   * Always hits the network — Pinia state survives client-side navigation, and
+   * an admin can change pricing mid-session, so a "fetch once" cache would keep
+   * showing a stale value until a full page reload.
+   */
+  async function fetchPricing(): Promise<void> {
+    const api = useApi()
+    const res = await api<any>('/jobs/pricing')
+    pricing.value = res.data
+  }
+
+  async function fetchPage(page: number, size = 10): Promise<Job[]> {
+    const api = useApi()
+    const res = await api<any>('/jobs/my-jobs', { params: { page, size } })
+    return res.data?.jobs ?? []
+  }
+
+  /**
+   * Fetches a single job by id — needed whenever a job detail page is opened
+   * directly or reloaded, since Pinia state (jobs/activeJob) doesn't survive a
+   * full page refresh and there's otherwise nothing in the store to show.
+   * Returns null on a 404 (not found, or belongs to someone else) rather than
+   * throwing, so callers can render a clean "not found" state.
+   */
+  async function fetchOne(id: string): Promise<Job | null> {
+    try {
+      const api = useApi()
+      const res = await api<any>(`/jobs/${id}`)
+      const job = res.data as Job
+
+      const idx = jobs.value.findIndex(j => j.id === id)
+      if (idx >= 0) jobs.value[idx] = job
+      else jobs.value.unshift(job)
+      activeJob.value = job
+
+      return job
+    } catch {
+      return null
+    }
+  }
+
   async function submitJob(payload: SubmitJobPayload): Promise<Job> {
     loading.value = true
-    await delay(900)
-    const { printCost, deliveryFee, total } = calculateCost(payload)
-    const newJob = {
-      id: `JOB-${1046 + jobs.value.length}`,
-      userId: 'usr_001',
-      fileType: null,
-      paymentMethod: payload.paymentMethod ?? 'mpesa',
-      paymentStatus: payload.paymentMethod === 'pay_on_pickup' ? 'pay_on_pickup' : 'unpaid',
-      status: 'pending',
-      cost: printCost,
-      deliveryFee,
-      total,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      mpesaRef: null,
-      adminNotes: '',
-      notifySms: true,
-      notifyWhatsapp: false,
-      ...payload,
-    } as Job
-    jobs.value.unshift(newJob)
-    activeJob.value = newJob
-    loading.value = false
-    return newJob
+    error.value   = null
+    try {
+      const api = useApi()
+      const body: Record<string, any> = {
+        pages:        payload.pages,
+        copies:       payload.copies,
+        colorMode:    payload.colorMode,
+        sides:        payload.sides,
+        paperSize:    payload.paperSize ?? 'A4',
+        deliveryType: payload.deliveryType,
+        paymentMethod: payload.paymentMethod ?? 'mpesa',
+      }
+      if (payload.fileId) {
+        body.fileId = payload.fileId
+      } else if ((payload as any).instructions?.trim()) {
+        body.instructions = (payload as any).instructions
+      }
+      if (payload.fileName) body.fileName = payload.fileName
+
+      const res = await api<any>('/jobs', { method: 'POST', body })
+      const job = res.data as Job
+      jobs.value.unshift(job)
+      activeJob.value = job
+      return job
+    } finally {
+      loading.value = false
+    }
   }
 
-  // Replace with: axios.post('/payments/mpesa/stk', { jobId, phone })
   async function initiateMpesa(jobId: string | undefined): Promise<{ success: boolean }> {
+    if (!jobId) return { success: false }
     loading.value = true
-    await delay(3000)
-    const job = jobs.value.find(j => j.id === jobId)
-    if (job) {
-      job.paymentStatus = 'paid'
-      job.status = 'pending'
-      job.mpesaRef = randomMpesaRef()
+    error.value   = null
+    try {
+      const auth = useAuthStore()
+      const api  = useApi()
+
+      await api('/payments/mpesa/initiate', {
+        method: 'POST',
+        body:   { jobId, phone: auth.user?.phone },
+      })
+
+      // Poll for payment confirmation (backend auto-confirms in ~5s for stub)
+      const MAX_POLLS = 30
+      for (let i = 0; i < MAX_POLLS; i++) {
+        await delay(2000)
+        const statusRes = await api<any>(`/payments/status/${jobId}`)
+        const payStatus = statusRes.data?.paymentStatus
+
+        if (payStatus === 'paid') {
+          // Refresh the job
+          const jobRes = await api<any>(`/jobs/${jobId}`)
+          const updated = jobRes.data as Job
+          const idx = jobs.value.findIndex(j => j.id === jobId)
+          if (idx >= 0) jobs.value[idx] = updated
+          if (activeJob.value?.id === jobId) activeJob.value = updated
+          return { success: true }
+        }
+        if (payStatus === 'failed') return { success: false }
+      }
+      return { success: false }
+    } catch (e: any) {
+      error.value = e?.data?.message ?? 'Payment failed'
+      return { success: false }
+    } finally {
+      loading.value = false
     }
-    loading.value = false
-    return { success: true }
   }
 
   function setActiveJob(job: Job) { activeJob.value = job }
 
-  return { jobs, loading, activeJob, fetchMyJobs, submitJob, initiateMpesa, setActiveJob }
+  return {
+    jobs, loading, activeJob, error, pricing,
+    activeJobs, jobsThisMonth, totalSpent,
+    fetchMyJobs, fetchPage, fetchOne, fetchPricing, submitJob, initiateMpesa, setActiveJob,
+  }
 })
 
 function delay(ms: number): Promise<void> { return new Promise(r => setTimeout(r, ms)) }
-
-function randomMpesaRef(): string {
-  return 'Q' + Math.random().toString(36).toUpperCase().slice(2, 9)
-}

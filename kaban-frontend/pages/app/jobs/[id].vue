@@ -215,7 +215,7 @@
           </div>
 
           <!-- Notification toggles -->
-          <div class="mt-md pt-md border-t border-outline-variant flex flex-col gap-md">
+          <!-- <div class="mt-md pt-md border-t border-outline-variant flex flex-col gap-md">
             <div class="flex items-center justify-between">
               <div class="flex items-center gap-sm">
                 <span class="material-symbols-outlined text-on-surface-variant">sms</span>
@@ -238,7 +238,7 @@
                 </div>
               </div>
             </div>
-          </div>
+          </div> -->
         </div>
 
         <!-- Help section -->
