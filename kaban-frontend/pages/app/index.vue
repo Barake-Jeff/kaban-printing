@@ -101,14 +101,14 @@
         <span class="font-headline-md text-headline-md text-primary font-bold">{{ jobs.jobsThisMonth }}</span>
         <span class="font-label-bold text-[10px] text-on-surface-variant text-center uppercase leading-tight">Jobs this month</span>
       </div>
-      <div class="bg-surface-container rounded-xl p-sm flex flex-col items-center gap-xs">
+      <!-- <div class="bg-surface-container rounded-xl p-sm flex flex-col items-center gap-xs">
         <span class="font-headline-md text-headline-md text-primary font-bold">{{ auth.user?.loyaltyPoints ?? 0 }}</span>
         <span class="font-label-bold text-[10px] text-on-surface-variant text-center uppercase leading-tight">Loyalty pts</span>
       </div>
       <div class="bg-surface-container rounded-xl p-sm flex flex-col items-center gap-xs">
         <span class="font-headline-md text-headline-md text-primary font-bold">{{ auth.user?.creditBalance ?? 0 }}</span>
         <span class="font-label-bold text-[10px] text-on-surface-variant text-center uppercase leading-tight">Credit KES</span>
-      </div>
+      </div> -->
     </section>
 
     <!-- Recent orders (only shown when spotlight is showing active jobs) -->
