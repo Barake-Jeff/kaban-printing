@@ -9,6 +9,9 @@ import { Setting } from '../admin/models/setting.model';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { getPricing } from '../../common/utils/pricing.util';
+import { parsePageRange } from '../../common/utils/page-range.util';
+
+const MAX_MANUAL_PAGES = 100;
 
 @Injectable()
 export class JobsService {
@@ -32,13 +35,28 @@ export class JobsService {
     let fileName: string | null = dto.fileName ?? null;
     let fileKey:  string | null = null;
     let pages = dto.pages;
+    let totalPages: number | null = null;
+    let pageSelection: string | null = null;
 
     if (dto.fileId) {
       const file = await this.fileModel.findOne({ where: { id: dto.fileId, userId: user.id } });
       if (!file) throw new NotFoundException('File not found');
-      fileName = file.originalName;
-      fileKey  = file.fileKey;
-      pages    = file.pageCount;
+      fileName   = file.originalName;
+      fileKey    = file.fileKey;
+      totalPages = file.pageCount;
+      pages      = file.pageCount;
+
+      if (dto.pageSelection?.trim()) {
+        try {
+          const parsed = parsePageRange(dto.pageSelection.trim(), file.pageCount);
+          pages = parsed.pageCount;
+          pageSelection = dto.pageSelection.trim();
+        } catch (e: any) {
+          throw new BadRequestException(e.message);
+        }
+      }
+    } else if (dto.pages > MAX_MANUAL_PAGES) {
+      throw new BadRequestException(`Manually entered page count cannot exceed ${MAX_MANUAL_PAGES}`);
     }
 
     const pricing     = await getPricing(this.settingModel);
@@ -58,6 +76,8 @@ export class JobsService {
       fileKey,
       instructions: dto.instructions ?? null,
       pages,
+      totalPages,
+      pageSelection,
       copies:       dto.copies,
       colorMode:    dto.colorMode,
       sides:        dto.sides,
@@ -123,6 +143,8 @@ export class JobsService {
       fileType:      raw.fileName ? raw.fileName.split('.').pop()?.toLowerCase() ?? null : null,
       instructions:  raw.instructions,
       pages:         raw.pages,
+      totalPages:    raw.totalPages,
+      pageSelection: raw.pageSelection,
       copies:        raw.copies,
       colorMode:     raw.colorMode,
       sides:         raw.sides,

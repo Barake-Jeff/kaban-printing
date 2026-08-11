@@ -47,7 +47,9 @@
             <p class="text-gray-700">{{ job.customerName ?? '—' }}</p>
             <p class="text-xs text-gray-400">{{ job.houseNumber ? `House ${job.houseNumber}` : '' }}</p>
           </td>
-          <td class="px-4 py-3 text-gray-600 hidden lg:table-cell">{{ job.pages }}p × {{ job.copies }}</td>
+          <td class="px-4 py-3 text-gray-600 hidden lg:table-cell">
+            {{ job.pages }}p × {{ job.copies }}<span v-if="job.pageSelection" class="text-amber-600" title="Specific pages selected">&nbsp;*</span>
+          </td>
           <td class="px-4 py-3">
             <span :class="['px-2.5 py-1 rounded-full text-xs font-semibold', statusBadgeCls(job.status)]">
               {{ statusLabel(job.status) }}

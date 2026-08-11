@@ -59,6 +59,12 @@ export class Job extends Model {
   @Column({ type: DataType.INTEGER, allowNull: false })
   copies: number;
 
+  @Column({ type: DataType.INTEGER, allowNull: true, field: 'total_pages' })
+  totalPages: number | null;
+
+  @Column({ type: DataType.STRING(500), allowNull: true, field: 'page_selection' })
+  pageSelection: string | null;
+
   @Default(ColorMode.BW)
   @Column({ type: DataType.ENUM(...Object.values(ColorMode)), allowNull: false, field: 'color_mode' })
   colorMode: ColorMode;

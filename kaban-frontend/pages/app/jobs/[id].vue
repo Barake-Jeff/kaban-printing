@@ -191,7 +191,9 @@
           <div class="grid grid-cols-2 gap-y-md gap-x-gutter">
             <div class="flex flex-col gap-xs">
               <span class="font-label-bold text-label-bold text-on-surface-variant uppercase">Pages</span>
-              <span class="font-body-lg text-body-lg">{{ job?.pages }} Pages</span>
+              <span class="font-body-lg text-body-lg">
+                {{ job?.pageSelection ? `${job.pages} of ${job.totalPages} (${job.pageSelection})` : `${job?.pages} Pages` }}
+              </span>
             </div>
             <div class="flex flex-col gap-xs">
               <span class="font-label-bold text-label-bold text-on-surface-variant uppercase">Copies</span>
