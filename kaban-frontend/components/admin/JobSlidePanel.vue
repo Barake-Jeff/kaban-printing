@@ -52,7 +52,9 @@
           <div class="grid grid-cols-2 gap-2 text-sm">
             <div class="bg-gray-50 rounded-xl p-3">
               <p class="text-xs text-gray-400">Pages</p>
-              <p class="font-semibold text-gray-900">{{ job.pages }}</p>
+              <p class="font-semibold text-gray-900">
+                {{ job.pageSelection ? `${job.pages} of ${job.totalPages}` : job.pages }}
+              </p>
             </div>
             <div class="bg-gray-50 rounded-xl p-3">
               <p class="text-xs text-gray-400">Copies</p>
@@ -66,6 +68,12 @@
               <p class="text-xs text-gray-400">Sides</p>
               <p class="font-semibold text-gray-900 capitalize">{{ job.sides }}</p>
             </div>
+          </div>
+          <div
+            v-if="job.pageSelection"
+            class="mt-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800"
+          >
+            <span class="font-semibold">Print only pages:</span> {{ job.pageSelection }}
           </div>
         </section>
 

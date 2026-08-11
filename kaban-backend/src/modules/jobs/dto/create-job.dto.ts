@@ -25,6 +25,11 @@ export class CreateJobDto {
   @Min(1)
   copies: number;
 
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  pageSelection?: string;
+
   @IsEnum(ColorMode)
   colorMode: ColorMode;
 

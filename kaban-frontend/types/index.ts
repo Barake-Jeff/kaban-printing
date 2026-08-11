@@ -28,6 +28,8 @@ export interface Job {
   fileType: string | null
   instructions: string | null
   pages: number
+  totalPages: number | null
+  pageSelection: string | null
   copies: number
   colorMode: ColorMode
   sides: SideMode
@@ -121,6 +123,7 @@ export interface SubmitJobPayload {
   paperSize: PaperSize
   deliveryType: DeliveryType
   pages: number
+  pageSelection?: string
   paymentMethod?: PaymentMethod
 }
 

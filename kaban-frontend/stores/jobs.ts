@@ -97,6 +97,7 @@ export const useJobsStore = defineStore('jobs', () => {
       }
       if (payload.fileId) {
         body.fileId = payload.fileId
+        if (payload.pageSelection?.trim()) body.pageSelection = payload.pageSelection.trim()
       } else if ((payload as any).instructions?.trim()) {
         body.instructions = (payload as any).instructions
       }

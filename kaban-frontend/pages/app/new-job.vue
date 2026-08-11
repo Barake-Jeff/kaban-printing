@@ -96,6 +96,30 @@
 
         <div class="bg-surface-container-low p-md space-y-md rounded-xl">
 
+          <!-- Pages: read-only total for file jobs, editable stepper for instructions-only jobs -->
+          <div v-if="selectedFile" class="flex items-center justify-between py-xs border-b border-outline-variant/30 pb-md">
+            <span class="font-body-lg text-body-lg text-on-surface">Total pages</span>
+            <span class="font-bold text-body-lg text-on-surface">{{ detectedTotalPages }}</span>
+          </div>
+          <div v-else class="flex items-center justify-between py-xs border-b border-outline-variant/30 pb-md">
+            <span class="font-body-lg text-body-lg text-on-surface">Pages</span>
+            <div class="flex items-center gap-md bg-surface-container-lowest border border-outline-variant rounded-lg p-xs">
+              <button
+                @click="form.pages = Math.max(1, form.pages - 1)"
+                class="w-10 h-10 flex items-center justify-center text-primary active:scale-90 transition-transform"
+              >
+                <span class="material-symbols-outlined">remove</span>
+              </button>
+              <span class="font-bold text-body-lg w-6 text-center">{{ form.pages }}</span>
+              <button
+                @click="form.pages = Math.min(MAX_MANUAL_PAGES, form.pages + 1)"
+                class="w-10 h-10 flex items-center justify-center text-primary active:scale-90 transition-transform"
+              >
+                <span class="material-symbols-outlined">add</span>
+              </button>
+            </div>
+          </div>
+
           <!-- Copies -->
           <div class="flex items-center justify-between py-xs border-b border-outline-variant/30 pb-md">
             <span class="font-body-lg text-body-lg text-on-surface">Copies</span>
@@ -162,6 +186,19 @@
               <span class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-on-surface-variant">expand_more</span>
             </div>
           </div>
+        </div>
+
+        <!-- Specific pages to print — only meaningful for a multi-page document -->
+        <div v-if="selectedFile && detectedTotalPages > 1" class="mt-md">
+          <CommonTextField
+            v-model="form.pageSelection"
+            label="Specific pages (optional)"
+            placeholder="e.g. 1-5, 8, 10-12"
+            :hint="`Leave blank to print all ${detectedTotalPages} pages`"
+            :error="pageSelectionError"
+            inputmode="text"
+            :maxlength="500"
+          />
         </div>
 
         <!-- Word conversion accuracy note -->
@@ -330,7 +367,9 @@
           <div class="space-y-md border-t border-outline-variant/30 pt-md">
             <div class="flex justify-between">
               <span class="font-body-sm text-body-sm text-on-surface-variant">Pages</span>
-              <span class="font-label-bold text-label-bold text-on-surface">{{ form.pages }}</span>
+              <span class="font-label-bold text-label-bold text-on-surface">
+                {{ form.pageSelection ? `${form.pages} of ${detectedTotalPages} (${form.pageSelection})` : form.pages }}
+              </span>
             </div>
             <div class="flex justify-between">
               <span class="font-body-sm text-body-sm text-on-surface-variant">Copies</span>
@@ -450,6 +489,11 @@ const fileMimeType   = ref<string | null>(null)
 const previewUrl     = ref<string | null>(null)
 const previewLoading = ref(false)
 
+// Server-confirmed total page count of the uploaded document (file jobs only).
+const detectedTotalPages = ref(1)
+const pageSelectionError = ref('')
+const MAX_MANUAL_PAGES = 100
+
 // Pricing is admin-configured (see GET /jobs/pricing) — fetch once up front so
 // it's ready well before the user reaches the cost estimate on step 2.
 onMounted(() => { jobs.fetchPricing() })
@@ -465,6 +509,7 @@ const form = reactive<SubmitJobPayload>({
   paperSize:    'A4',
   deliveryType: 'pickup',
   pages:        1,
+  pageSelection: '',
 })
 
 const colorOpts: Array<{ val: ColorMode; label: string }> = [
@@ -502,10 +547,41 @@ function handleFileChange(e: Event) {
   fileMimeType.value = null
   previewUrl.value = null
   form.fileName = file.name
-  form.pages = file.type === 'application/pdf'
+  form.pageSelection = ''
+  pageSelectionError.value = ''
+  detectedTotalPages.value = file.type === 'application/pdf'
     ? Math.max(1, Math.round(file.size / 51200))
     : 1
+  form.pages = detectedTotalPages.value
 }
+
+/**
+ * Keeps form.pages (the billable count) in sync with either the page-selection
+ * text field (file jobs) or the detected total — mirrors the backend's own
+ * parsePageRange logic via utils/pageRange.ts so the live cost estimate never
+ * drifts from what the server will actually charge.
+ */
+function recomputeEffectivePages() {
+  if (!selectedFile.value) return // instructions-only: the stepper drives form.pages directly
+
+  const spec = form.pageSelection?.trim()
+  if (!spec) {
+    pageSelectionError.value = ''
+    form.pages = detectedTotalPages.value
+    return
+  }
+
+  const result = parsePageRangeClient(spec, detectedTotalPages.value)
+  if (result.error) {
+    pageSelectionError.value = result.error
+    form.pages = detectedTotalPages.value
+  } else {
+    pageSelectionError.value = ''
+    form.pages = result.pageCount
+  }
+}
+
+watch(() => form.pageSelection, recomputeEffectivePages)
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024)    return bytes + ' B'
@@ -544,10 +620,11 @@ async function handleNext() {
         const formData = new FormData()
         formData.append('file', selectedFile.value)
         const res = await api<any>('/files/upload', { method: 'POST', body: formData })
-        fileId.value       = res.data.fileId
-        form.fileName      = res.data.fileName
-        form.pages         = res.data.pageCount
-        fileMimeType.value = res.data.mimeType
+        fileId.value           = res.data.fileId
+        form.fileName          = res.data.fileName
+        detectedTotalPages.value = res.data.pageCount
+        recomputeEffectivePages()
+        fileMimeType.value     = res.data.mimeType
       } catch (e: any) {
         stepError.value = e?.data?.message ?? 'File upload failed. Please try again.'
         uploadLoading.value = false
@@ -570,6 +647,9 @@ async function handleNext() {
     step.value++
     return
   }
+
+  // Blocked silently — the TextField's own :error prop already shows the message inline.
+  if (step.value === 1 && pageSelectionError.value) return
 
   if (step.value < 3) { step.value++; return }
 

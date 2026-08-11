@@ -409,6 +409,8 @@ export class AdminService {
       fileType:       raw.fileName ? raw.fileName.split('.').pop()?.toLowerCase() ?? null : null,
       instructions:   raw.instructions,
       pages:          raw.pages,
+      totalPages:     raw.totalPages,
+      pageSelection:  raw.pageSelection,
       copies:         raw.copies,
       colorMode:      raw.colorMode,
       sides:          raw.sides,
