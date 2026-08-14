@@ -43,14 +43,14 @@
           <span class="font-headline-md text-headline-md text-primary font-bold">KES {{ jobs.totalSpent }}</span>
           <span class="font-label-bold text-[11px] text-on-surface-variant uppercase">Total spent</span>
         </div>
-        <div class="bg-surface-container rounded-xl p-md flex flex-col gap-xs">
+        <!-- <div class="bg-surface-container rounded-xl p-md flex flex-col gap-xs">
           <span class="font-headline-md text-headline-md text-primary font-bold">{{ auth.user?.loyaltyPoints ?? 0 }}</span>
           <span class="font-label-bold text-[11px] text-on-surface-variant uppercase">Loyalty points</span>
         </div>
         <div class="bg-surface-container rounded-xl p-md flex flex-col gap-xs">
           <span class="font-headline-md text-headline-md text-primary font-bold">KES {{ auth.user?.creditBalance ?? 0 }}</span>
           <span class="font-label-bold text-[11px] text-on-surface-variant uppercase">Credit balance</span>
-        </div>
+        </div> -->
       </div>
     </section>
 

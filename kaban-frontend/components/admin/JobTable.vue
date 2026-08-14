@@ -145,14 +145,24 @@ function paymentBadgeCls(s: string) {
   }[s] ?? 'bg-gray-100 text-gray-600'
 }
 
+function waitStartTime(job: Job): number {
+  // Once ready, the clock restarts from readyAt — the column tracks time
+  // waiting for *pickup*, not the original queue wait. Jobs that predate this
+  // feature (no readyAt stamped) fall back to the original createdAt clock.
+  if (job.status === 'ready' && job.readyAt) return new Date(job.readyAt).getTime()
+  return new Date(job.createdAt).getTime()
+}
+
 function waitTime(job: Job): string {
-  const mins = Math.floor((Date.now() - new Date(job.createdAt).getTime()) / 60000)
+  if (job.status === 'delivered') return 'DONE'
+  const mins = Math.floor((Date.now() - waitStartTime(job)) / 60000)
   if (mins < 60) return `${mins}m`
   return `${Math.floor(mins / 60)}h ${mins % 60}m`
 }
 
 function waitColor(job: Job): string {
-  const mins = Math.floor((Date.now() - new Date(job.createdAt).getTime()) / 60000)
+  if (job.status === 'delivered') return 'text-green-600'
+  const mins = Math.floor((Date.now() - waitStartTime(job)) / 60000)
   if (mins >= 60) return 'text-red-600'
   if (mins >= 30) return 'text-amber-600'
   return 'text-gray-500'

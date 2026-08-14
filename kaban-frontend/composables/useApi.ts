@@ -6,10 +6,7 @@ export function useApi() {
     onRequest({ options }) {
       const token = localStorage.getItem('accessToken')
       if (token) {
-        options.headers = {
-          ...(options.headers as Record<string, string>),
-          Authorization: `Bearer ${token}`,
-        }
+        options.headers.set('Authorization', `Bearer ${token}`)
       }
     },
     async onResponseError({ response }) {

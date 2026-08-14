@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { JobReadyReminderService } from './job-ready-reminder.service';
 import { Job } from '../jobs/models/job.model';
 import { User } from '../users/models/user.model';
 import { Payment } from '../payments/models/payment.model';
@@ -16,6 +17,6 @@ import { FilesModule } from '../files/files.module';
     FilesModule,
   ],
   controllers: [AdminController],
-  providers: [AdminService],
+  providers: [AdminService, JobReadyReminderService],
 })
 export class AdminModule {}

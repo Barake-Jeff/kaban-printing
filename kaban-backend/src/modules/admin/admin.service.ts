@@ -101,7 +101,21 @@ export class AdminService {
     const job = await this.jobModel.findOne({ where: { id }, include: [{ model: User }] });
     if (!job) throw new NotFoundException('Job not found');
 
-    await job.update({ status: dto.status });
+    const updates: Partial<Job> = { status: dto.status };
+    if (dto.status === JobStatus.READY) {
+      // (Re)entering ready — restart the 30-min overdue clock and allow a fresh push.
+      updates.readyAt = new Date();
+      updates.readyOverdueNotifiedAt = null;
+    } else if (dto.status === JobStatus.PENDING || dto.status === JobStatus.PRINTING) {
+      // Reverted out of the ready/delivered lifecycle — clear stale bookkeeping.
+      updates.readyAt = null;
+      updates.readyOverdueNotifiedAt = null;
+    } else if (dto.status === JobStatus.DELIVERED && !job.readyAt) {
+      // Skipped straight past ready (e.g. printing -> delivered) — stamp it
+      // anyway so readyAt is never left null for a job that's actually done.
+      updates.readyAt = new Date();
+    }
+    await job.update(updates);
 
     const triggerMap: Partial<Record<JobStatus, string>> = {
       [JobStatus.PRINTING]:  'printing_started',
@@ -420,6 +434,7 @@ export class AdminService {
       paymentStatus:  raw.paymentStatus,
       mpesaRef:       raw.mpesaRef,
       status:         raw.status,
+      readyAt:        raw.readyAt,
       cost:           Number(raw.cost),
       deliveryFee:    Number(raw.deliveryFee),
       adminNotes:     raw.adminNotes ?? '',
