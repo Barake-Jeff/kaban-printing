@@ -28,7 +28,7 @@ export function usePushNotifications() {
 
     const sub = await reg.pushManager.subscribe({
       userVisibleOnly: true,
-      applicationServerKey: appServerKey,
+      applicationServerKey: appServerKey as BufferSource,
     })
 
     const json = sub.toJSON()

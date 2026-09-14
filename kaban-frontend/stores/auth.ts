@@ -152,6 +152,7 @@ export const useAuthStore = defineStore('auth', () => {
       })
 
       persistSession(res)
+      schedulePushPrompt()
       return { ok: true }
     } catch (e: any) {
       return fail(e)

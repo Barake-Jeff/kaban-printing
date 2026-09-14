@@ -93,6 +93,12 @@ export class Job extends Model {
   @Column({ type: DataType.ENUM(...Object.values(JobStatus)), allowNull: false })
   status: JobStatus;
 
+  @Column({ type: DataType.DATE, allowNull: true, field: 'ready_at' })
+  readyAt: Date | null;
+
+  @Column({ type: DataType.DATE, allowNull: true, field: 'ready_overdue_notified_at' })
+  readyOverdueNotifiedAt: Date | null;
+
   @Default(0)
   @Column({ type: DataType.DECIMAL(10, 2), allowNull: false })
   cost: number;

@@ -39,6 +39,7 @@ export interface Job {
   paymentStatus: PaymentStatus
   mpesaRef: string | null
   status: JobStatus
+  readyAt: string | null
   cost: number
   deliveryFee: number
   createdAt: string
@@ -123,7 +124,7 @@ export interface SubmitJobPayload {
   paperSize: PaperSize
   deliveryType: DeliveryType
   pages: number
-  pageSelection?: string
+  pageSelection: string
   paymentMethod?: PaymentMethod
 }
 

@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { SequelizeModule } from '@nestjs/sequelize';
 import { AuthModule } from './modules/auth/auth.module';
 import { PushModule } from './modules/push/push.module';
@@ -38,6 +39,7 @@ import { Payment } from './modules/payments/models/payment.model';
         define:        { underscored: true },
       }),
     }),
+    ScheduleModule.forRoot(),
     AuthModule,
     PushModule,
     NotificationsModule,

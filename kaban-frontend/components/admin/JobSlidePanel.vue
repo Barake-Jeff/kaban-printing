@@ -103,7 +103,7 @@
             <button
               v-for="s in statusOptions"
               :key="s"
-              @click="$emit('update-status', job.id, s)"
+              @click="onStatusClick(s)"
               :class="[
                 'px-3 py-1.5 rounded-xl text-xs font-semibold transition-all border',
                 job.status === s
@@ -128,7 +128,7 @@
       </div>
 
       <!-- Footer -->
-      <div class="sticky bottom-0 bg-white border-t border-gray-100 px-5 py-4 flex items-center gap-3">
+      <div class="sticky bottom-0 bg-white border-t border-gray-100 px-5 pt-4 pb-6 flex items-center gap-3">
         <button
           v-if="nextStatus"
           @click="$emit('update-status', job.id, nextStatus)"
@@ -142,6 +142,15 @@
       </div>
     </div>
   </Transition>
+
+  <AdminConfirmDialog
+    v-model="revertConfirmOpen"
+    title="Revert job status?"
+    :description="revertTarget ? `This will move the job back to '${statusLabel(revertTarget)}'. Make sure this isn't accidental.` : ''"
+    confirm-label="Revert"
+    :danger="true"
+    @confirm="confirmRevert"
+  />
 </template>
 
 <script setup lang="ts">
@@ -161,7 +170,7 @@ async function downloadFile() {
   if (url) window.open(url, '_blank')
   else toast.error('Could not get download link')
 }
-defineEmits<{
+const emit = defineEmits<{
   'close': []
   'update-status': [jobId: string, status: Job['status']]
   'mark-paid': [jobId: string]
@@ -178,6 +187,25 @@ const nextStatus = computed<Job['status'] | null>(() => {
   const idx = statusOrder.indexOf(props.job.status)
   return idx >= 0 && idx < statusOrder.length - 1 ? statusOrder[idx + 1] : null
 })
+
+const revertConfirmOpen = ref(false)
+const revertTarget = ref<Job['status'] | null>(null)
+
+function onStatusClick(s: Job['status']) {
+  if (!props.job || s === props.job.status) return
+  const isRevert = statusOrder.indexOf(s) < statusOrder.indexOf(props.job.status)
+  if (isRevert) {
+    revertTarget.value = s
+    revertConfirmOpen.value = true
+  } else {
+    emit('update-status', props.job.id, s)
+  }
+}
+
+function confirmRevert() {
+  if (props.job && revertTarget.value) emit('update-status', props.job.id, revertTarget.value)
+  revertTarget.value = null
+}
 
 function statusLabel(s: Job['status']) {
   return { pending: 'Pending', printing: 'Printing', ready: 'Ready', delivered: 'Delivered' }[s]
