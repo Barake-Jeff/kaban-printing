@@ -14,12 +14,13 @@ export function useApi() {
         const refreshToken = localStorage.getItem('refreshToken')
         if (refreshToken) {
           try {
-            const res = await $fetch<{ data: { accessToken: string } }>('/auth/refresh', {
+            const res = await $fetch<{ data: { accessToken: string; refreshToken: string } }>('/auth/refresh', {
               baseURL: config.public.apiBase,
               method: 'POST',
               body: { refreshToken },
             })
             localStorage.setItem('accessToken', res.data.accessToken)
+            localStorage.setItem('refreshToken', res.data.refreshToken)
           } catch {
             localStorage.removeItem('accessToken')
             localStorage.removeItem('refreshToken')

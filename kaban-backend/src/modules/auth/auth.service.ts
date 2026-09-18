@@ -1,5 +1,5 @@
 import {
-  Injectable, UnauthorizedException, ConflictException, ForbiddenException,
+  Injectable, Logger, UnauthorizedException, ConflictException, ForbiddenException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { JwtService } from '@nestjs/jwt';
@@ -8,19 +8,25 @@ import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 import { User, UserRole } from '../users/models/user.model';
 import { RefreshToken } from './models/refresh-token.model';
+import { PasswordResetRequest, PasswordResetRequestStatus } from './models/password-reset-request.model';
 import { CustomerRegisterDto } from './dto/customer-register.dto';
 import { CustomerLoginDto } from './dto/customer-login.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { normalizeKenyanPhone } from '../../common/utils/phone.util';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     @InjectModel(User)
     private readonly userModel: typeof User,
     @InjectModel(RefreshToken)
     private readonly refreshTokenModel: typeof RefreshToken,
+    @InjectModel(PasswordResetRequest)
+    private readonly passwordResetRequestModel: typeof PasswordResetRequest,
     private readonly jwtService: JwtService,
     private readonly config: ConfigService,
   ) {}
@@ -42,11 +48,14 @@ export class AuthService {
     const phone = this.normalizePhone(dto.phone);
     const user = await this.userModel.findOne({ where: { phone } });
 
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+    // A single generic message covers "no such user", "wrong password", and
+    // "right password but wrong portal" — distinguishing the last one would
+    // leak which "kind" of account a phone number belongs to.
+    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash)) || user.role !== UserRole.CUSTOMER) {
       throw new UnauthorizedException('Invalid phone number or password');
     }
-    if (user.role !== UserRole.CUSTOMER) {
-      throw new ForbiddenException('Please use the admin login');
+    if (!user.active) {
+      throw new UnauthorizedException('Account is deactivated. Contact an administrator.');
     }
     return this.issueTokens(user);
   }
@@ -55,11 +64,11 @@ export class AuthService {
     const phone = this.normalizePhone(dto.phone);
     const user = await this.userModel.findOne({ where: { phone } });
 
-    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash))) {
+    if (!user || !(await bcrypt.compare(dto.password, user.passwordHash)) || user.role === UserRole.CUSTOMER) {
       throw new UnauthorizedException('Invalid credentials');
     }
-    if (user.role === UserRole.CUSTOMER) {
-      throw new ForbiddenException('Access denied');
+    if (!user.active) {
+      throw new UnauthorizedException('Account is deactivated. Contact an administrator.');
     }
     return this.issueTokens(user);
   }
@@ -93,21 +102,61 @@ export class AuthService {
     }
 
     const tokenHash = this.hashToken(refreshToken);
-    const stored = await this.refreshTokenModel.findOne({
-      where: { tokenHash, revoked: false },
-    });
-    if (!stored) throw new UnauthorizedException('Refresh token revoked or not found');
+    // Look up regardless of `revoked` so we can tell "never existed" apart
+    // from "already used" — the latter is a replay signal, not just an error.
+    const stored = await this.refreshTokenModel.findOne({ where: { tokenHash } });
+    if (!stored) throw new UnauthorizedException('Invalid or expired refresh token');
+
+    if (stored.revoked) {
+      // This token was already rotated out. Someone is presenting a used
+      // token — treat it as theft and kill every other session for this user.
+      await this.refreshTokenModel.update(
+        { revoked: true },
+        { where: { userId: stored.userId, revoked: false } },
+      );
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
 
     const user = await this.userModel.findOne({ where: { id: payload.sub } });
-    if (!user) throw new UnauthorizedException('User not found');
+    if (!user) throw new UnauthorizedException('Invalid or expired refresh token');
+    if (!user.active) throw new UnauthorizedException('Account is deactivated. Contact an administrator.');
 
-    return { accessToken: this.issueAccessToken(user) };
+    // Rotate: the presented token is single-use — revoke it and issue a fresh pair.
+    await stored.update({ revoked: true });
+    const accessToken = this.issueAccessToken(user);
+    const newRefreshToken = await this.issueRefreshToken(user);
+
+    return { accessToken, refreshToken: newRefreshToken };
   }
 
   async logout(refreshToken: string) {
     const tokenHash = this.hashToken(refreshToken);
     await this.refreshTokenModel.update({ revoked: true }, { where: { tokenHash } });
     return { success: true };
+  }
+
+  // Interim flow: no self-service reset yet. This just queues a request for
+  // an admin to handle via PATCH /admin/users/:id/password. Always returns
+  // the same generic message so the response itself can't be used to check
+  // whether a phone number is registered.
+  async forgotPassword(dto: ForgotPasswordDto) {
+    const phone = this.normalizePhone(dto.phone);
+    const user = await this.userModel.findOne({ where: { phone } });
+
+    if (user) {
+      const existing = await this.passwordResetRequestModel.findOne({
+        where: { userId: user.id, status: PasswordResetRequestStatus.PENDING },
+      });
+      if (!existing) {
+        await this.passwordResetRequestModel.create({ userId: user.id });
+        this.logger.log(`Password reset requested for userId=${user.id}`);
+      }
+    }
+
+    return {
+      success: true,
+      message: 'If that phone number is registered, our team will reach out to help reset your password.',
+    };
   }
 
   private async issueTokens(user: User) {
@@ -125,8 +174,13 @@ export class AuthService {
   }
 
   private async issueRefreshToken(user: User): Promise<string> {
+    // jti guarantees a unique token string even if issued for the same user
+    // within the same second (iat has only second precision) — without it,
+    // two refresh tokens minted back-to-back (e.g. login immediately
+    // followed by a refresh call) can be byte-identical, which collides with
+    // the UNIQUE constraint on token_hash.
     const token = this.jwtService.sign(
-      { sub: user.id },
+      { sub: user.id, jti: crypto.randomUUID() },
       { secret: this.config.get('JWT_REFRESH_SECRET'), expiresIn: '30d' },
     );
     const tokenHash = this.hashToken(token);

@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { Op, fn, col, literal, QueryTypes } from 'sequelize';
 import * as bcrypt from 'bcrypt';
@@ -6,12 +6,15 @@ import { Job, JobStatus, PaymentStatus } from '../jobs/models/job.model';
 import { User, UserRole } from '../users/models/user.model';
 import { Payment, PaymentRecordStatus, PaymentRecordMethod } from '../payments/models/payment.model';
 import { Setting } from './models/setting.model';
+import { RefreshToken } from '../auth/models/refresh-token.model';
+import { PasswordResetRequest, PasswordResetRequestStatus } from '../auth/models/password-reset-request.model';
 import { FilesService } from '../files/files.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { SaveNotesDto } from './dto/save-notes.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { SaveSettingsDto } from './dto/save-settings.dto';
+import { SetUserPasswordDto } from './dto/set-user-password.dto';
 import { DEFAULT_PRICING } from '../../common/utils/pricing.util';
 
 const DEFAULT_SETTINGS = {
@@ -47,6 +50,8 @@ export class AdminService {
     @InjectModel(User)     private readonly userModel:    typeof User,
     @InjectModel(Payment)  private readonly paymentModel: typeof Payment,
     @InjectModel(Setting)  private readonly settingModel: typeof Setting,
+    @InjectModel(RefreshToken) private readonly refreshTokenModel: typeof RefreshToken,
+    @InjectModel(PasswordResetRequest) private readonly passwordResetRequestModel: typeof PasswordResetRequest,
     private readonly filesService: FilesService,
     private readonly notificationsService: NotificationsService,
   ) {}
@@ -262,6 +267,62 @@ export class AdminService {
     });
     if (!member) throw new NotFoundException('Staff member not found');
     await member.update({ active: true });
+    return { success: true };
+  }
+
+  // ── Password reset requests ───────────────────────────────────────────────
+
+  async getPasswordResetRequests() {
+    const requests = await this.passwordResetRequestModel.findAll({
+      where: { status: PasswordResetRequestStatus.PENDING },
+      // PasswordResetRequest has two associations to User (user, resolvedBy) —
+      // `as` is required or Sequelize can't tell which one to join.
+      include: [{ model: User, as: 'user', attributes: ['name', 'phone', 'houseNumber', 'role'] }],
+      order: [['createdAt', 'ASC']],
+    });
+    return requests.map(r => ({
+      id:          r.id,
+      userId:      r.userId,
+      name:        r.user?.name        ?? null,
+      phone:       r.user?.phone       ?? null,
+      houseNumber: r.user?.houseNumber ?? null,
+      role:        r.user?.role        ?? null,
+      createdAt:   r.createdAt,
+    }));
+  }
+
+  async dismissPasswordResetRequest(id: string, adminUser: User) {
+    const request = await this.passwordResetRequestModel.findOne({ where: { id } });
+    if (!request) throw new NotFoundException('Request not found');
+    await request.update({
+      status: PasswordResetRequestStatus.RESOLVED,
+      resolvedAt: new Date(),
+      resolvedByUserId: adminUser.id,
+    });
+    return { success: true };
+  }
+
+  async setUserPassword(targetUserId: string, dto: SetUserPasswordDto, adminUser: User) {
+    const target = await this.userModel.findOne({ where: { id: targetUserId } });
+    if (!target) throw new NotFoundException('User not found');
+    if (target.role === UserRole.ADMIN) {
+      throw new ForbiddenException("Cannot reset another admin's password");
+    }
+
+    const passwordHash = await bcrypt.hash(dto.newPassword, 12);
+    await target.update({ passwordHash });
+
+    // An externally-set password should force re-login everywhere.
+    await this.refreshTokenModel.update(
+      { revoked: true },
+      { where: { userId: target.id, revoked: false } },
+    );
+
+    await this.passwordResetRequestModel.update(
+      { status: PasswordResetRequestStatus.RESOLVED, resolvedAt: new Date(), resolvedByUserId: adminUser.id },
+      { where: { userId: target.id, status: PasswordResetRequestStatus.PENDING } },
+    );
+
     return { success: true };
   }
 

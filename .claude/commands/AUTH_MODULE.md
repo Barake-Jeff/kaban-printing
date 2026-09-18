@@ -687,3 +687,28 @@ npm install @types/bcrypt @types/passport-jwt --save-dev
 - [ ] `POST /api/admin/auth/create-staff` works for admin role, returns 403 for others
 - [ ] `npm run seed` creates the two development users
 - [ ] No `passwordHash` field appears in any API response
+
+---
+
+## Security hardening (post-audit, API2:2023 Broken Authentication)
+
+> The module above was the original locked design. The items below are hardening changes
+> layered on top after a security audit (`docs/SECURITY_PLAN.md`). Read both — this section
+> does not replace the original, it amends it.
+
+- **Deactivated accounts are now actually blocked.** `JwtStrategy.validate()` and `AuthService.login`/`adminLogin`/`refresh` all check `user.active` and throw `UnauthorizedException` if false. Previously `active` was set on the model but never checked at auth time.
+- **Rate limiting** via `@nestjs/throttler`, registered globally in `app.module.ts` (default 60 req/60s per IP via `APP_GUARD`). Tighter overrides on `register`/`login`/`refresh` (customer + admin) and `forgot-password` using `@Throttle({ default: { limit, ttl } })`.
+- **Refresh tokens now rotate.** `POST /auth/refresh` response shape changed:
+  ```typescript
+  { accessToken: string, refreshToken: string }   // was { accessToken: string }
+  ```
+  The presented refresh token is revoked and a new one issued on every call. Presenting an already-revoked (replayed) token now revokes *all* of that user's refresh tokens — reuse-detection. The frontend (`useApi.ts`) must persist the new `refreshToken` from every refresh response, not just the `accessToken`.
+- **Password policy**: customer passwords still `@MinLength(8)`, but now also require at least one letter and one digit (`@Matches(/(?=.*[A-Za-z])(?=.*\d)/)`). Staff-created accounts (`CreateStaffDto`, both the `auth` and `admin` module copies) require `@MinLength(12)` plus the same complexity rule, and now also have `@MaxLength(100)`.
+- **Login error messages are unified.** `login()`/`adminLogin()` no longer throw a distinct `ForbiddenException` when the credentials are right but the account is the wrong "kind" for that portal (e.g. a customer hitting `/admin/auth/login`) — both cases now return the same generic invalid-credentials message as a wrong password, to avoid leaking account type. The deactivated-account message stays distinct since it only fires after credentials are already verified.
+- **Login DTO passwords now have `@MaxLength(100)`** (previously unbounded).
+- **Forgot-password flow (interim, admin-mediated)** — no self-service reset yet:
+  - `POST /auth/forgot-password` (public, throttled, body `{ phone }`) creates a `password_reset_requests` row and always returns the same generic success message regardless of whether the phone is registered.
+  - `GET /admin/password-reset-requests` (admin only) lists pending requests with the requester's name/phone/houseNumber/role.
+  - `PATCH /admin/password-reset-requests/:id/dismiss` (admin only) resolves a request without changing a password.
+  - `PATCH /admin/users/:id/password` (admin only, body `{ newPassword }`) sets a new password directly. Refuses with 403 if the target user's role is `admin` — an admin cannot reset another admin's password this way. Revokes all of the target's outstanding refresh tokens and auto-resolves any pending request for them.
+  - New model: `src/modules/auth/models/password-reset-request.model.ts` (`password_reset_requests` table — see `DATABASE_SCHEMA.md`).

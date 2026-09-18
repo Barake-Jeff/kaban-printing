@@ -1,9 +1,16 @@
 import {
-  Table, Column, Model, DataType, ForeignKey, Default, Index,
+  Table, Column, Model, DataType, ForeignKey, Default,
 } from 'sequelize-typescript';
 import { User } from '../../users/models/user.model';
 
-@Table({ tableName: 'notifications_log', timestamps: false, underscored: true })
+// Index is declared table-level with the real column name ('user_id') — a
+// property-level @Index() here uses the JS attribute name ('userId') instead
+// of the `field:` mapping when Sequelize syncs the index, which fails against
+// MySQL since that column doesn't exist under that name.
+@Table({
+  tableName: 'notifications_log', timestamps: false, underscored: true,
+  indexes: [{ name: 'idx_user_id', fields: ['user_id'] }],
+})
 export class NotificationLog extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })
   id: string;
@@ -11,7 +18,6 @@ export class NotificationLog extends Model {
   @Column({ type: DataType.STRING(36), allowNull: false, field: 'job_id' })
   jobId: string;
 
-  @Index({ name: 'idx_user_id' })
   @ForeignKey(() => User)
   @Column({ type: DataType.UUID, allowNull: false, field: 'user_id' })
   userId: string;

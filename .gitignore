@@ -17,3 +17,4 @@ kaban-backend/fonts/msfonts/*
 # Root artifacts
 .nuxt/
 node_modules/
+docs/

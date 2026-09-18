@@ -1,14 +1,16 @@
 import {
-  Table, Column, Model, DataType, ForeignKey, BelongsTo, Default, Unique, Index,
+  Table, Column, Model, DataType, ForeignKey, BelongsTo, Default, Unique,
 } from 'sequelize-typescript';
 import { User } from '../../users/models/user.model';
 
-@Table({ tableName: 'refresh_tokens', timestamps: false })
+@Table({
+  tableName: 'refresh_tokens', timestamps: false,
+  indexes: [{ name: 'idx_user_id', fields: ['user_id'] }],
+})
 export class RefreshToken extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })
   id: string;
 
-  @Index({ name: 'idx_user_id' })
   @ForeignKey(() => User)
   @Column({ type: DataType.UUID, allowNull: false, field: 'user_id' })
   userId: string;

@@ -1,9 +1,6 @@
 import { IsString, MinLength, MaxLength, Matches } from 'class-validator';
 
-export class ChangePasswordDto {
-  @IsString()
-  currentPassword: string;
-
+export class SetUserPasswordDto {
   @IsString()
   @MinLength(8)
   @MaxLength(100)

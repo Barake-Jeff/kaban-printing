@@ -8,10 +8,11 @@ import { AuthService } from './auth.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { User } from '../users/models/user.model';
 import { RefreshToken } from './models/refresh-token.model';
+import { PasswordResetRequest } from './models/password-reset-request.model';
 
 @Module({
   imports: [
-    SequelizeModule.forFeature([User, RefreshToken]),
+    SequelizeModule.forFeature([User, RefreshToken, PasswordResetRequest]),
     PassportModule,
     JwtModule.register({}),
   ],

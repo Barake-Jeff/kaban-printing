@@ -4,12 +4,14 @@ import {
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
-import { UserRole } from '../users/models/user.model';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { User, UserRole } from '../users/models/user.model';
 import { AdminService } from './admin.service';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { SaveNotesDto } from './dto/save-notes.dto';
 import { CreateStaffDto } from './dto/create-staff.dto';
 import { SaveSettingsDto } from './dto/save-settings.dto';
+import { SetUserPasswordDto } from './dto/set-user-password.dto';
 
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -95,6 +97,26 @@ export class AdminController {
   @Roles(UserRole.ADMIN)
   reactivateStaff(@Param('id') id: string) {
     return this.adminService.reactivateStaff(id);
+  }
+
+  // ── Password reset requests (admin only) ────────────────────────────────────
+
+  @Get('password-reset-requests')
+  @Roles(UserRole.ADMIN)
+  getPasswordResetRequests() {
+    return this.adminService.getPasswordResetRequests();
+  }
+
+  @Patch('password-reset-requests/:id/dismiss')
+  @Roles(UserRole.ADMIN)
+  dismissPasswordResetRequest(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.adminService.dismissPasswordResetRequest(id, user);
+  }
+
+  @Patch('users/:id/password')
+  @Roles(UserRole.ADMIN)
+  setUserPassword(@Param('id') id: string, @Body() dto: SetUserPasswordDto, @CurrentUser() user: User) {
+    return this.adminService.setUserPassword(id, dto, user);
   }
 
   // ── Settings ───────────────────────────────────────────────────────────────

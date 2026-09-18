@@ -26,6 +26,7 @@ kaban
 | `push_subscriptions` | Web Push subscription endpoints per user         |
 | `notifications_log`  | Record of every notification sent (push/SMS/WA)  |
 | `settings`           | Admin-configurable key-value settings store      |
+| `password_reset_requests` | Forgot-password requests queued for admin action |
 
 ---
 
@@ -313,6 +314,43 @@ export class Setting extends Model {
 Known keys: `business`, `pricing`, `notificationMatrix`.
 Values are `JSON.stringify`-ed objects.
 Use `model.upsert({ key, value })` to save — never `create` (would fail on duplicate key).
+
+---
+
+## Table: `password_reset_requests`
+
+Interim forgot-password flow (no self-service reset yet — see `AUTH_MODULE.md`'s security
+hardening addendum). A customer or staff member submits a request; an admin resolves it
+either by dismissing it or by setting a new password directly.
+
+```sql
+CREATE TABLE password_reset_requests (
+  id                  VARCHAR(36)  PRIMARY KEY DEFAULT (UUID()),
+  user_id             VARCHAR(36)  NOT NULL,
+  status              ENUM('pending', 'resolved') NOT NULL DEFAULT 'pending',
+  created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  resolved_at         DATETIME     NULL,
+  resolved_by_user_id VARCHAR(36)  NULL,
+
+  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+  FOREIGN KEY (resolved_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
+  INDEX idx_user_id (user_id),
+  INDEX idx_status (status)
+);
+```
+
+**Sequelize model:** `src/modules/auth/models/password-reset-request.model.ts`
+
+| MySQL column           | TypeScript property |
+|-------------------------|----------------------|
+| `user_id`               | `userId`             |
+| `status`                | `status`             |
+| `created_at`             | `createdAt`          |
+| `resolved_at`            | `resolvedAt`         |
+| `resolved_by_user_id`    | `resolvedByUserId`   |
+
+`synchronize: true` auto-creates this table in development. **Run the SQL above manually
+against any non-dev database** (staging/production), since `synchronize` is disabled there.
 
 ---
 

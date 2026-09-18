@@ -58,7 +58,20 @@ Never change a field name in an API response without updating the frontend store
 ### POST /api/auth/refresh
 
 ```typescript
-{ accessToken: string }
+// Refresh tokens rotate — persist BOTH fields, not just accessToken
+{ accessToken: string, refreshToken: string }
+```
+
+### POST /api/auth/forgot-password
+
+Request body:
+```typescript
+{ phone: string }
+```
+
+Response (always the same shape/message, whether or not the phone is registered):
+```typescript
+{ success: true, message: string }
 ```
 
 ---

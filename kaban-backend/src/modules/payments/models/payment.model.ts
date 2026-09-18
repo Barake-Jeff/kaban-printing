@@ -1,5 +1,5 @@
 import {
-  Table, Column, Model, DataType, ForeignKey, BelongsTo, Default, Unique, Index,
+  Table, Column, Model, DataType, ForeignKey, BelongsTo, Default, Unique,
 } from 'sequelize-typescript';
 import { User } from '../../users/models/user.model';
 import { Job } from '../../jobs/models/job.model';
@@ -17,7 +17,10 @@ export enum PaymentRecordMethod {
   PAY_ON_PICKUP = 'pay_on_pickup',
 }
 
-@Table({ tableName: 'payments', timestamps: true, underscored: true })
+@Table({
+  tableName: 'payments', timestamps: true, underscored: true,
+  indexes: [{ name: 'idx_user_id', fields: ['user_id'] }],
+})
 export class Payment extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })
   id: string;
@@ -30,7 +33,6 @@ export class Payment extends Model {
   @BelongsTo(() => Job)
   job: Job;
 
-  @Index({ name: 'idx_user_id' })
   @ForeignKey(() => User)
   @Column({ type: DataType.UUID, allowNull: false, field: 'user_id' })
   userId: string;

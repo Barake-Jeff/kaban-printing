@@ -149,8 +149,9 @@ All routes are prefixed with `/api` via `app.setGlobalPrefix('api')` in `main.ts
 ```
 POST   /api/auth/register          → register new customer
 POST   /api/auth/login             → customer login → { accessToken, refreshToken, user }
-POST   /api/auth/refresh           → body: { refreshToken } → new accessToken
+POST   /api/auth/refresh           → body: { refreshToken } → { accessToken, refreshToken } (refresh token rotates on every call)
 POST   /api/auth/logout            → revokes refresh token
+POST   /api/auth/forgot-password   → body: { phone } → queues an admin-visible request (no self-service reset yet)
 
 POST   /api/admin/auth/login       → staff login (clerk or admin only)
 POST   /api/admin/auth/create-staff → create clerk/admin account (admin role only)
@@ -204,6 +205,10 @@ GET    /api/admin/staff            → list all clerks and admins
 POST   /api/admin/staff            → create staff member (admin only)
 PATCH  /api/admin/staff/:id/deactivate → soft-disable staff (admin only)
 PATCH  /api/admin/staff/:id/reactivate → re-enable staff (admin only)
+
+GET    /api/admin/password-reset-requests → list pending forgot-password requests (admin only)
+PATCH  /api/admin/password-reset-requests/:id/dismiss → resolve without changing password (admin only)
+PATCH  /api/admin/users/:id/password → set a new password for a non-admin user (admin only; 403 if target is admin)
 
 GET    /api/admin/settings         → { business, pricing, notificationMatrix }
 PATCH  /api/admin/settings         → partial update any settings section
