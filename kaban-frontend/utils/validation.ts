@@ -59,14 +59,27 @@ export function rulePhoneKe(): ValidationRule {
       : 'Enter a valid Safaricom or Airtel number, e.g. 0712345678.'
 }
 
-/** Mirrors @MinLength(8) on the register and change-password DTOs. */
-export function rulePasswordMin(): ValidationRule {
-  return (v) => (!v || v.length >= 8 ? null : 'Password must be at least 8 characters.')
+/**
+ * Mirrors @MinLength on the password DTOs: 8 for customers (register,
+ * change-password, admin set-password), 12 for staff creation.
+ */
+export function rulePasswordMin(min = 8): ValidationRule {
+  return (v) => (!v || v.length >= min ? null : `Password must be at least ${min} characters.`)
 }
 
 /** Mirrors @MaxLength(100). */
 export function rulePasswordMax(): ValidationRule {
   return (v) => (!v || v.length <= 100 ? null : 'Password must be 100 characters or fewer.')
+}
+
+/** Mirrors @Matches(/(?=.*[A-Za-z])(?=.*\d)/) on every backend password DTO. */
+export function isStrongPassword(value: string): boolean {
+  return /(?=.*[A-Za-z])(?=.*\d)/.test(value ?? '')
+}
+
+export function rulePasswordStrength(): ValidationRule {
+  return (v) =>
+    !v || isStrongPassword(v) ? null : 'Password must include at least one letter and one number.'
 }
 
 export function ruleMatches(otherKey: string, message: string): ValidationRule {
@@ -125,6 +138,10 @@ export function mapServerErrors(
   for (const err of errors) {
     if (/^phone must be a valid kenyan number/i.test(err)) {
       byField.phone ??= err
+      continue
+    }
+    if (/^password must contain/i.test(err)) {
+      byField.password ??= err
       continue
     }
 

@@ -15,8 +15,16 @@
       <h1 class="text-xl font-bold text-primary mb-1">Staff sign in</h1>
       <p class="text-sm text-on-surface-variant mb-8">For PrintEase team members only.</p>
 
+      <AuthForgotPasswordForm
+        v-if="forgotOpen"
+        variant="staff"
+        :initial-phone="form.phone"
+        @back="forgotOpen = false"
+      />
+
       <!-- --field-accent swaps the shared field's orange focus ring for staff navy -->
       <form
+        v-else
         class="space-y-5"
         style="--field-accent: #021745"
         novalidate
@@ -44,6 +52,14 @@
           revealable
           label-class="block text-sm font-semibold text-primary"
         />
+
+        <div class="text-right">
+          <button
+            type="button"
+            class="text-sm font-semibold text-primary/70 hover:text-primary transition-colors"
+            @click="forgotOpen = true"
+          >Forgot password?</button>
+        </div>
 
         <CommonAlertBanner tone="error" :message="auth.error" />
 
@@ -75,6 +91,7 @@ const auth   = useAuthStore()
 const router = useRouter()
 
 const form = reactive({ phone: '', password: '' })
+const forgotOpen = ref(false)
 
 // Redirect already-logged-in staff
 onMounted(() => {

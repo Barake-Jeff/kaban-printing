@@ -25,7 +25,18 @@ export class UsersService {
   async updateProfile(userId: string, dto: UpdateProfileDto) {
     const user = await this.userModel.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
-    await user.update(dto);
+
+    // Explicit allow-list rather than `user.update(dto)` — safety here must
+    // not depend on the global ValidationPipe's whitelist config staying
+    // correct elsewhere. Only set a key when the client actually sent it:
+    // `{ houseNumber: dto.houseNumber }` would still be an own `undefined`
+    // key when omitted, which Sequelize would write as NULL.
+    const updates: Partial<Pick<User, 'name' | 'houseNumber' | 'estate'>> = {};
+    if (dto.name !== undefined) updates.name = dto.name;
+    if (dto.houseNumber !== undefined) updates.houseNumber = dto.houseNumber;
+    if (dto.estate !== undefined) updates.estate = dto.estate;
+    await user.update(updates);
+
     const { passwordHash, ...safe } = user.toJSON() as any;
     return safe;
   }

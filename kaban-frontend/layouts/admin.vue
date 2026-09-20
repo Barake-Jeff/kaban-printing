@@ -50,6 +50,11 @@
               :style="(item.exact ? isExactActive : isActive) ? filledIcon : ''"
             >{{ item.icon }}</span>
             {{ item.name }}
+            <span
+              v-if="item.route === 'admin-password-requests' && pendingCount > 0"
+              class="ml-auto min-w-5 h-5 px-1.5 rounded-full bg-[#F97316] text-white text-[11px] font-bold flex items-center justify-center"
+              :aria-label="`${pendingCount} pending`"
+            >{{ pendingCount }}</span>
           </button>
         </NuxtLink>
       </nav>
@@ -171,25 +176,35 @@
 </template>
 
 <script setup lang="ts">
-import { useEventListener } from '@vueuse/core'
+import { useEventListener, useIntervalFn } from '@vueuse/core'
 
 const route  = useRoute()
 const router = useRouter()
 const auth   = useAuthStore()
 const admin  = useAdminStore()
+const { pendingCount, refreshPendingCount } = usePasswordResets()
 
 const drawerOpen    = ref(false)
 const shortcutsOpen = ref(false)
 
 const filledIcon = "font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;"
 
-const navItems = [
-  { name: 'Dashboard', icon: 'dashboard',      route: 'admin',           exact: true  },
-  { name: 'Queue',     icon: 'pending_actions', route: 'admin-queue',     exact: false },
-  { name: 'Customers', icon: 'group',           route: 'admin-customers', exact: false },
-  { name: 'Reports',   icon: 'assessment',      route: 'admin-reports',   exact: false },
-  { name: 'Settings',  icon: 'settings',        route: 'admin-settings',  exact: false },
+const allNavItems = [
+  { name: 'Dashboard', icon: 'dashboard',       route: 'admin',                   exact: true,  adminOnly: false },
+  { name: 'Queue',     icon: 'pending_actions', route: 'admin-queue',             exact: false, adminOnly: false },
+  { name: 'Customers', icon: 'group',           route: 'admin-customers',         exact: false, adminOnly: false },
+  { name: 'Password requests', icon: 'lock_reset', route: 'admin-password-requests', exact: false, adminOnly: true },
+  { name: 'Reports',   icon: 'assessment',      route: 'admin-reports',           exact: false, adminOnly: false },
+  { name: 'Settings',  icon: 'settings',        route: 'admin-settings',          exact: false, adminOnly: false },
 ]
+
+// The backend only lets admins (not clerks) touch password resets.
+const isFullAdmin = computed(() => auth.user?.role === 'admin')
+const navItems = computed(() => allNavItems.filter(i => !i.adminOnly || isFullAdmin.value))
+
+// Nothing pushes new requests to the admin, so poll gently for the sidebar badge.
+useIntervalFn(() => { if (isFullAdmin.value) refreshPendingCount() }, 60_000)
+onMounted(() => { if (isFullAdmin.value) refreshPendingCount() })
 
 const shortcutsList = [
   { key: '?',     label: 'Show this help'        },
@@ -214,6 +229,7 @@ const breadcrumbs = computed(() => {
   if (name === 'admin-queue')        return [{ label: 'Dashboard', route: 'admin' }, { label: 'Queue' }]
   if (name === 'admin-customers')    return [{ label: 'Dashboard', route: 'admin' }, { label: 'Customers' }]
   if (name === 'admin-customers-id') return [{ label: 'Dashboard', route: 'admin' }, { label: 'Customers', route: 'admin-customers' }, { label: 'Profile' }]
+  if (name === 'admin-password-requests') return [{ label: 'Dashboard', route: 'admin' }, { label: 'Password requests' }]
   if (name === 'admin-reports')      return [{ label: 'Dashboard', route: 'admin' }, { label: 'Reports' }]
   if (name === 'admin-settings')     return [{ label: 'Dashboard', route: 'admin' }, { label: 'Settings' }]
   return [{ label: 'Admin' }]

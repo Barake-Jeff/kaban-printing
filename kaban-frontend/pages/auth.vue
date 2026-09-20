@@ -43,7 +43,20 @@
         </div>
 
         <div
-          v-if="activeTab === 'signup'"
+          v-if="forgotOpen"
+          id="panel-forgot"
+          role="tabpanel"
+          aria-labelledby="tab-login"
+        >
+          <AuthForgotPasswordForm
+            :initial-phone="sharedPhone"
+            :disabled="!online"
+            @back="forgotOpen = false"
+          />
+        </div>
+
+        <div
+          v-else-if="activeTab === 'signup'"
           id="panel-signup"
           role="tabpanel"
           aria-labelledby="tab-signup"
@@ -65,6 +78,7 @@
             :initial-phone="sharedPhone"
             :disabled="!online"
             @switch-tab="handleSwitchTab"
+            @forgot="handleForgot"
           />
         </div>
 
@@ -117,10 +131,19 @@ const online = useOnline()
 const activeTab   = ref<TabKey>(route.query.tab === 'login' ? 'login' : 'signup')
 /** Carries a typed number across the 401/409 handoffs so nobody retypes it. */
 const sharedPhone = ref('')
+/** Forgot-password is a sub-view of the login tab, not a tab of its own. */
+const forgotOpen  = ref(false)
 
 function setTab(tab: TabKey) {
+  // Any tab interaction (including re-clicking "Log in") leaves the forgot view.
+  forgotOpen.value = false
   if (activeTab.value === tab) return
   activeTab.value = tab
+}
+
+function handleForgot({ phone }: { phone: string }) {
+  sharedPhone.value = phone
+  forgotOpen.value  = true
 }
 
 function cycleTab(direction: number) {

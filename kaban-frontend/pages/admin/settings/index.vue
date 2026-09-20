@@ -140,7 +140,7 @@
                   <th class="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400 hidden sm:table-cell">Phone</th>
                   <th class="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Role</th>
                   <th class="px-5 py-3 text-xs font-semibold uppercase tracking-wider text-gray-400">Status</th>
-                  <th class="px-5 py-3 w-12" />
+                  <th class="px-5 py-3" />
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-50">
@@ -161,16 +161,24 @@
                     </span>
                   </td>
                   <td class="px-5 py-3">
-                    <button
-                      v-if="member.active"
-                      @click="() => { deactivateTarget = member.id; confirmOpen = true }"
-                      class="text-xs text-red-500 hover:text-red-700 font-medium"
-                    >Deactivate</button>
-                    <button
-                      v-else
-                      @click="adminStore.reactivateStaff(member.id)"
-                      class="text-xs text-green-600 hover:text-green-800 font-medium"
-                    >Reactivate</button>
+                    <div class="flex items-center justify-end gap-4 whitespace-nowrap">
+                      <!-- Admin passwords can't be reset by another admin (backend returns 403). -->
+                      <button
+                        v-if="isFullAdmin && member.role === 'clerk'"
+                        @click="openReset(member)"
+                        class="text-xs text-primary hover:underline font-medium"
+                      >Reset password</button>
+                      <button
+                        v-if="member.active"
+                        @click="() => { deactivateTarget = member.id; confirmOpen = true }"
+                        class="text-xs text-red-500 hover:text-red-700 font-medium"
+                      >Deactivate</button>
+                      <button
+                        v-else
+                        @click="adminStore.reactivateStaff(member.id)"
+                        class="text-xs text-green-600 hover:text-green-800 font-medium"
+                      >Reactivate</button>
+                    </div>
                   </td>
                 </tr>
               </tbody>
@@ -198,7 +206,8 @@
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1.5">Password</label>
-                <input v-model="newStaff.password" type="password" class="input-field" placeholder="Min 8 characters" />
+                <input v-model="newStaff.password" type="password" class="input-field" placeholder="Min 12 characters" />
+                <p class="text-xs text-gray-400 mt-1.5">At least 12 characters, with a letter and a number.</p>
               </div>
               <div>
                 <label class="block text-xs font-semibold text-gray-500 mb-1.5">Role</label>
@@ -227,6 +236,8 @@
           :danger="true"
           @confirm="doDeactivate"
         />
+
+        <AdminSetPasswordDialog v-model="resetOpen" :target="resetTarget" />
       </template>
 
       <!-- ── Notifications tab ──────────────────────────────────────────────── -->
@@ -274,11 +285,14 @@
 
 <script setup lang="ts">
 import { toast } from 'vue-sonner'
-import type { SettingsState, NotificationTrigger } from '~/types'
+import type { SettingsState, NotificationTrigger, StaffMember } from '~/types'
 
 definePageMeta({ layout: 'admin', middleware: 'auth', requiresAuth: true, role: 'admin' })
 
 const adminStore = useAdminStore()
+const auth       = useAuthStore()
+
+const isFullAdmin = computed(() => auth.user?.role === 'admin')
 
 const tabs      = ['Business', 'Pricing', 'Staff', 'Notifications']
 const activeTab = ref('Business')
@@ -333,11 +347,35 @@ async function addStaff() {
     toast.error('Please fill all fields')
     return
   }
+  // Mirrors CreateStaffDto: 12–100 chars with a letter and a number.
+  const pwError = rulePasswordMin(12)(newStaff.password, {})
+    ?? rulePasswordMax()(newStaff.password, {})
+    ?? rulePasswordStrength()(newStaff.password, {})
+  if (pwError) {
+    toast.error(pwError)
+    return
+  }
+
   addingStaff.value = true
-  await adminStore.createStaff({ ...newStaff })
-  Object.assign(newStaff, { name: '', phone: '', password: '', role: 'clerk' })
-  addingStaff.value = false
-  addModalOpen.value = false
+  try {
+    await adminStore.createStaff({ ...newStaff })
+    Object.assign(newStaff, { name: '', phone: '', password: '', role: 'clerk' })
+    addModalOpen.value = false
+  } catch (e: any) {
+    // Keep the modal open with the form intact so the admin can correct and retry.
+    toast.error(parseAuthError(e).message)
+  } finally {
+    addingStaff.value = false
+  }
+}
+
+// ── Reset a clerk's password ─────────────────────────────────────────────────
+const resetOpen   = ref(false)
+const resetTarget = ref<{ id: string; name: string; phone: string } | null>(null)
+
+function openReset(member: StaffMember) {
+  resetTarget.value = { id: member.id, name: member.name, phone: member.phone }
+  resetOpen.value   = true
 }
 
 async function doDeactivate() {

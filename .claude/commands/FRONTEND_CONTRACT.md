@@ -288,6 +288,37 @@ Request body: partial (any subset of the above).
 
 ---
 
+## Password reset requests (admin only)
+
+### GET /api/admin/password-reset-requests
+
+Pending requests only, oldest first. `role` may be `'admin'` — those can be dismissed but not
+reset in-app (the backend returns 403 for `PATCH /admin/users/:id/password` against an admin).
+
+```typescript
+Array<{
+  id:          string,
+  userId:      string,        // pass this to PATCH /admin/users/:id/password
+  name:        string | null,
+  phone:       string | null,
+  houseNumber: string | null, // 'N/A' for staff
+  role:        'customer' | 'clerk' | 'admin' | null,
+  createdAt:   string,        // ISO 8601
+}>
+```
+
+### PATCH /api/admin/password-reset-requests/:id/dismiss
+
+Returns `{ success: true }`. Resolves the request without changing any password.
+
+### PATCH /api/admin/users/:id/password
+
+Request body: `{ newPassword: string }` — 8–100 chars, at least one letter and one number.
+Returns `{ success: true }`. Also revokes all of the user's refresh tokens and resolves any
+pending request for them. Works for customers and clerks, at any time (no request needed).
+
+---
+
 ## Nuxt store → API endpoint mapping
 
 | Store method                             | HTTP call                                      |
@@ -296,6 +327,7 @@ Request body: partial (any subset of the above).
 | `useAuthStore().register()`              | POST /api/auth/register                        |
 | `useAuthStore().adminLogin()`            | POST /api/admin/auth/login                     |
 | `useAuthStore().logout()`                | POST /api/auth/logout                          |
+| `useAuthStore().requestPasswordReset()`  | POST /api/auth/forgot-password                 |
 | `useJobsStore().fetchMyJobs()`           | GET /api/jobs/my                               |
 | `useJobsStore().submitJob()`             | POST /api/jobs                                 |
 | `useJobsStore().initiateMpesa(jobId)`    | POST /api/payments/mpesa/stk                   |
@@ -315,40 +347,25 @@ Request body: partial (any subset of the above).
 | `useAdminSettings().fetchSettings()`    | GET /api/admin/settings                        |
 | `useAdminSettings().saveSettings(dto)`  | PATCH /api/admin/settings                      |
 | `useAdminReports().fetchReportData()`   | GET /api/admin/reports                         |
+| `usePasswordResets().fetchRequests()`   | GET /api/admin/password-reset-requests         |
+| `usePasswordResets().dismissRequest(id)`| PATCH /api/admin/password-reset-requests/:id/dismiss |
+| `usePasswordResets().setUserPassword(userId, pw)` | PATCH /api/admin/users/:id/password  |
 
 ---
 
 ## How the frontend calls the API
 
-All authenticated calls go through `composables/useApi.ts`:
+All authenticated calls go through `composables/useApi.ts` — read that file for the exact
+code. The contract it upholds:
 
-```typescript
-export function useApi() {
-  const config = useRuntimeConfig()
-
-  return $fetch.create({
-    baseURL: config.public.apiBase,   // NUXT_PUBLIC_API_BASE env var
-    onRequest({ options }) {
-      const token = localStorage.getItem('accessToken')
-      if (token) {
-        options.headers = { ...options.headers, Authorization: `Bearer ${token}` }
-      }
-    },
-    async onResponseError({ response }) {
-      if (response.status === 401) {
-        const refreshToken = localStorage.getItem('refreshToken')
-        if (refreshToken) {
-          const data = await $fetch<any>(
-            '/auth/refresh',
-            { baseURL: config.public.apiBase, method: 'POST', body: { refreshToken } }
-          )
-          localStorage.setItem('accessToken', data.data.accessToken)
-        }
-      }
-    },
-  })
-}
-```
+- `baseURL` is `NUXT_PUBLIC_API_BASE`; the access token is added as a `Bearer` header.
+- On a 401 it calls `POST /auth/refresh` and stores **both** returned tokens
+  (`accessToken` and `refreshToken` — refresh tokens rotate and are single-use).
+- **Concurrent 401s must share one refresh call** (module-level in-flight promise). The
+  backend treats a replayed refresh token as theft and revokes every session, so parallel
+  independent refreshes would log the user out whenever the access token expires. Do not
+  "simplify" this back to a refresh per failed request.
+- It does not retry the original failed request; the next call succeeds with the new token.
 
 ---
 

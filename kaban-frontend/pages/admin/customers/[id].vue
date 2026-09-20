@@ -24,6 +24,14 @@
         <div class="flex-1 min-w-0">
           <h1 class="text-2xl font-bold text-gray-900">{{ customer.name }}</h1>
           <p class="text-sm text-gray-500 mt-0.5">House {{ customer.houseNumber }} · {{ customer.phone }}</p>
+          <button
+            v-if="isFullAdmin"
+            class="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
+            @click="pwdOpen = true"
+          >
+            <span class="material-symbols-outlined" style="font-size:16px;">lock_reset</span>
+            Reset password
+          </button>
         </div>
         <div class="grid grid-cols-3 gap-4 text-center">
           <div>
@@ -120,6 +128,8 @@
       <p class="text-sm">Customer not found</p>
     </div>
 
+    <AdminSetPasswordDialog v-model="pwdOpen" :target="pwdTarget" />
+
     <!-- Job slide panel -->
     <AdminJobSlidePanel
       :job="admin.selectedJob"
@@ -141,8 +151,18 @@ definePageMeta({ layout: 'admin', middleware: 'auth', requiresAuth: true, role: 
 
 const route   = useRoute()
 const admin   = useAdminStore()
+const auth    = useAuthStore()
 const loading = ref(false)
 const customer = ref<Customer | null>(null)
+
+// Clerks can open this page, but only admins may reset passwords (backend enforces it too).
+const isFullAdmin = computed(() => auth.user?.role === 'admin')
+const pwdOpen     = ref(false)
+const pwdTarget   = computed(() =>
+  customer.value
+    ? { id: customer.value.id, name: customer.value.name, phone: customer.value.phone }
+    : null,
+)
 
 const customerId = computed(() => route.params.id as string)
 

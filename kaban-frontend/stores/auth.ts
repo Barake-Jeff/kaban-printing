@@ -130,6 +130,24 @@ export const useAuthStore = defineStore('auth', () => {
     error.value = null
   }
 
+  /**
+   * Deliberately does not touch `error`/`loading`: those drive the login forms, and
+   * a failed reset request must not leak a banner into them when the user goes back.
+   */
+  async function requestPasswordReset(phone: string): Promise<AuthResult> {
+    try {
+      await $fetch('/auth/forgot-password', {
+        baseURL: base,
+        method:  'POST',
+        body:    { phone: normalizeKePhone(phone) },
+        timeout: AUTH_TIMEOUT,
+      })
+      return { ok: true }
+    } catch (e: any) {
+      return { ok: false, ...parseAuthError(e) }
+    }
+  }
+
   function schedulePushPrompt() {
     if (!import.meta.client) return
     setTimeout(async () => {
@@ -161,5 +179,8 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, loading, error, isLoggedIn, isAdmin, login, adminLogin, signup, logout }
+  return {
+    user, loading, error, isLoggedIn, isAdmin,
+    login, adminLogin, signup, logout, requestPasswordReset,
+  }
 })

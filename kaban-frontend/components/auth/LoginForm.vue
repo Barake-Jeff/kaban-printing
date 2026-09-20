@@ -29,7 +29,11 @@
       />
 
       <div class="text-right">
-        <a href="#" class="font-label-bold text-label-bold text-secondary">Forgot Password?</a>
+        <button
+          type="button"
+          class="font-label-bold text-label-bold text-secondary"
+          @click="$emit('forgot', { phone: values.phone })"
+        >Forgot Password?</button>
       </div>
 
       <CommonAlertBanner tone="error" :messages="formErrors">
@@ -74,6 +78,7 @@ const props = withDefaults(
 
 defineEmits<{
   'switch-tab': [{ tab: 'signup'; phone: string }]
+  forgot: [{ phone: string }]
 }>()
 
 const auth   = useAuthStore()

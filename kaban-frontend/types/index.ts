@@ -201,10 +201,24 @@ export interface StaffMember {
   joinedAt: string
 }
 
+// ── Admin: Password reset requests ────────────────────────────────────────────
+
+export interface PasswordResetRequest {
+  id: string
+  userId: string
+  name: string | null
+  phone: string | null
+  houseNumber: string | null
+  role: UserRole | null
+  createdAt: string
+}
+
 // Augment vue-router RouteMeta with our custom page meta fields
 declare module 'vue-router' {
   interface RouteMeta {
     requiresAuth?: boolean
     role?: UserRole
+    /** Stricter than `role: 'admin'` (which admits clerks too): admins only. */
+    adminOnly?: boolean
   }
 }

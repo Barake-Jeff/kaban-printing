@@ -79,7 +79,7 @@
               v-model="passwords.newPass"
               :type="showNew ? 'text' : 'password'"
               class="input-field pr-12"
-              placeholder="Minimum 8 characters"
+              placeholder="8+ characters, letters and numbers"
             />
             <button
               @click="showNew = !showNew"
@@ -185,11 +185,21 @@ async function changePassword() {
     passwordError.value = 'New password must be at least 8 characters.'
     return
   }
+  if (!isStrongPassword(passwords.newPass)) {
+    passwordError.value = 'New password must include at least one letter and one number.'
+    return
+  }
   if (passwords.newPass !== passwords.confirm) {
     passwordError.value = 'Passwords do not match.'
     return
   }
-  await users.changePassword({ currentPassword: passwords.current, newPassword: passwords.newPass })
+  try {
+    await users.changePassword({ currentPassword: passwords.current, newPassword: passwords.newPass })
+  } catch (e: any) {
+    // e.g. wrong current password — previously an unhandled rejection with nothing shown.
+    passwordError.value = parseAuthError(e).message
+    return
+  }
   passwordSuccess.value = true
   passwords.current = ''
   passwords.newPass = ''

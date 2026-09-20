@@ -65,8 +65,8 @@
         autocomplete="new-password"
         enterkeyhint="next"
         revealable
-        hint="At least 8 characters"
-        :hint-satisfied="values.password.length >= 8"
+        hint="At least 8 characters, with a letter and a number"
+        :hint-satisfied="values.password.length >= 8 && isStrongPassword(values.password)"
         :error="errorFor('password')"
         @blur="touch('password')"
       />
@@ -146,7 +146,7 @@ const { values, touch, errorFor, validateAll, setServerErrors, firstInvalidKey }
       phone:       [ruleRequired('phone number'), rulePhoneKe()],
       houseNumber: [ruleRequired('house number'), ruleMaxLength(20, 'House number')],
       estate:      [ruleRequired('estate or street'), ruleMaxLength(255, 'Estate')],
-      password:    [ruleRequired('password'), rulePasswordMin(), rulePasswordMax()],
+      password:    [ruleRequired('password'), rulePasswordMin(), rulePasswordMax(), rulePasswordStrength()],
       confirm:     [ruleMatches('password', 'Passwords do not match.')],
     },
   )
