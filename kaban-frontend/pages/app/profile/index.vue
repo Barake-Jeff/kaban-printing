@@ -176,7 +176,7 @@ const users  = useUsersStore()
 const router = useRouter()
 const { isSupported, isGranted, requestAndSubscribe, unsubscribe } = usePushNotifications()
 
-onMounted(() => { if (!jobs.jobs.length) jobs.fetchMyJobs() })
+onMounted(() => jobs.fetchMyJobs({ silent: jobs.jobs.length > 0 }))
 
 const initials = computed(() => {
   const name = auth.user?.name ?? ''

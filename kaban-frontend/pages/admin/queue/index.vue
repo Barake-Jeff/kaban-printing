@@ -5,7 +5,7 @@
     <div class="flex flex-col sm:flex-row sm:items-center gap-3">
       <div class="flex-1">
         <h1 class="text-2xl font-bold text-gray-900">Print Queue</h1>
-        <p class="text-sm text-gray-500 mt-0.5">{{ admin.jobs.length }} total jobs</p>
+        <p class="text-sm text-gray-500 mt-0.5">{{ liveJobs.length }} total jobs</p>
       </div>
       <button
         @click="refresh"
@@ -99,24 +99,28 @@ definePageMeta({ layout: 'admin', middleware: 'auth', requiresAuth: true, role: 
 
 const admin = useAdminStore()
 
-const activeTab    = ref<'all' | 'pending' | 'printing' | 'ready' | 'delivered'>('all')
+const activeTab    = ref<'all' | 'pending' | 'printing' | 'ready' | 'delivered' | 'cancelled'>('all')
 const selectedIds  = ref<Set<string>>(new Set())
 const focusedIndex = ref(-1)
 const initialLoaded = ref(false)
 
 const statusOrder: Job['status'][] = ['pending', 'printing', 'ready', 'delivered']
 
+// Cancelled jobs stay on record but out of the way: they only show under their own tab.
+const liveJobs = computed(() => admin.jobs.filter(j => j.status !== 'cancelled'))
+
 const filteredJobs = computed(() => {
-  if (activeTab.value === 'all') return admin.jobs
+  if (activeTab.value === 'all') return liveJobs.value
   return admin.jobs.filter(j => j.status === activeTab.value)
 })
 
 const tabs = computed(() => [
-  { key: 'all'       as const, label: 'All',       count: admin.jobs.length },
+  { key: 'all'       as const, label: 'All',       count: liveJobs.value.length },
   { key: 'pending'   as const, label: 'Pending',   count: admin.jobs.filter(j => j.status === 'pending').length },
   { key: 'printing'  as const, label: 'Printing',  count: admin.jobs.filter(j => j.status === 'printing').length },
   { key: 'ready'     as const, label: 'Ready',     count: admin.jobs.filter(j => j.status === 'ready').length },
   { key: 'delivered' as const, label: 'Delivered', count: admin.jobs.filter(j => j.status === 'delivered').length },
+  { key: 'cancelled' as const, label: 'Cancelled', count: admin.jobs.filter(j => j.status === 'cancelled').length },
 ])
 
 function openJob(job: Job) {

@@ -92,11 +92,13 @@ CREATE TABLE jobs (
   delivery_type   ENUM('pickup', 'delivery') NOT NULL DEFAULT 'pickup',
   payment_method  ENUM('mpesa', 'pay_on_pickup') NOT NULL DEFAULT 'mpesa',
   payment_status  ENUM('unpaid', 'paid', 'pay_on_pickup') NOT NULL DEFAULT 'unpaid',
-  status          ENUM('pending', 'printing', 'ready', 'delivered') NOT NULL DEFAULT 'pending',
+  status          ENUM('pending', 'printing', 'ready', 'delivered', 'cancelled') NOT NULL DEFAULT 'pending',
   cost            DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   delivery_fee    DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   mpesa_ref       VARCHAR(50)  NULL,
   admin_notes     TEXT         NULL,
+  cancelled_at    DATETIME     NULL,      -- set by PATCH /admin/jobs/:id/cancel (soft-cancel)
+  cancelled_by    CHAR(36)     NULL,      -- staff user id; deliberately not a foreign key
   created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
@@ -132,8 +134,23 @@ CREATE TABLE jobs (
 | `delivery_fee`    | `deliveryFee`        |
 | `mpesa_ref`       | `mpesaRef`           |
 | `admin_notes`     | `adminNotes`         |
+| `cancelled_at`    | `cancelledAt`        |
+| `cancelled_by`    | `cancelledByUserId`  |
 | `created_at`      | `createdAt`          |
 | `updated_at`      | `updatedAt`          |
+
+**Existing databases need a manual migration for soft-cancel.** Sequelize's `sync()` creates missing
+tables but never alters existing ones, so on any database that predates this change run:
+
+```sql
+ALTER TABLE jobs
+  MODIFY COLUMN status ENUM('pending','printing','ready','delivered','cancelled') NOT NULL,
+  ADD COLUMN cancelled_at DATETIME NULL,
+  ADD COLUMN cancelled_by CHAR(36) BINARY NULL;
+```
+
+Cancelling is a soft-cancel (`status = 'cancelled'`); jobs are never deleted through the API. (Deleting a
+job that has a `payments` row was always impossible anyway: `payments.job_id` is a restrictive foreign key.)
 
 ---
 

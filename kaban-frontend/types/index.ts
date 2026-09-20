@@ -4,7 +4,7 @@ export type PaperSize = 'A4' | 'A5' | 'Letter' | 'Legal'
 export type DeliveryType = 'pickup' | 'delivery'
 export type PaymentMethod = 'mpesa' | 'pay_on_pickup'
 export type PaymentStatus = 'paid' | 'unpaid' | 'pay_on_pickup'
-export type JobStatus = 'pending' | 'printing' | 'ready' | 'delivered'
+export type JobStatus = 'pending' | 'printing' | 'ready' | 'delivered' | 'cancelled'
 export type UserRole = 'customer' | 'clerk' | 'admin'
 export type AlertType = 'unpaid' | 'wait' | 'delivery'
 
@@ -40,6 +40,7 @@ export interface Job {
   mpesaRef: string | null
   status: JobStatus
   readyAt: string | null
+  cancelledAt?: string | null
   cost: number
   deliveryFee: number
   createdAt: string

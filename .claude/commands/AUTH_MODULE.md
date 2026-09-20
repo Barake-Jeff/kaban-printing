@@ -62,8 +62,11 @@ POST /api/auth/logout      → revoke refresh token (requires JWT auth)
 
 ```
 POST /api/admin/auth/login        → phone + password, role must be 'clerk' or 'admin'
-POST /api/admin/auth/create-staff → create clerk or admin account (admin role only)
 ```
+
+> **Removed:** `POST /api/admin/auth/create-staff`. It duplicated `POST /api/admin/staff` (AdminController, admin
+> only), which is the single way to create staff accounts now. The `create-staff` sections and code samples
+> further down this document are historical and no longer match the code.
 
 Both controllers are in the same `auth.module.ts` but on different route prefixes:
 
@@ -684,7 +687,7 @@ npm install @types/bcrypt @types/passport-jwt --save-dev
 - [ ] `POST /api/auth/refresh` returns a new access token
 - [ ] `POST /api/auth/logout` revokes the refresh token in the DB
 - [ ] A route with `@UseGuards(JwtAuthGuard)` returns 401 without a token
-- [ ] `POST /api/admin/auth/create-staff` works for admin role, returns 403 for others
+- [ ] `POST /api/admin/staff` works for admin role, returns 403 for others (the old `create-staff` route was removed)
 - [ ] `npm run seed` creates the two development users
 - [ ] No `passwordHash` field appears in any API response
 

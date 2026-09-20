@@ -9,6 +9,8 @@ export enum JobStatus {
   PRINTING  = 'printing',
   READY     = 'ready',
   DELIVERED = 'delivered',
+  // Soft-cancel: the row stays as the audit trail. Only set via AdminService.cancelJob.
+  CANCELLED = 'cancelled',
 }
 
 export enum PaymentStatus {
@@ -114,4 +116,12 @@ export class Job extends Model {
 
   @Column({ type: DataType.TEXT, allowNull: true, field: 'admin_notes' })
   adminNotes: string | null;
+
+  @Column({ type: DataType.DATE, allowNull: true, field: 'cancelled_at' })
+  cancelledAt: Date | null;
+
+  // The staff member who cancelled it. Deliberately not a foreign key: an audit note must never
+  // block or cascade with a user delete.
+  @Column({ type: DataType.UUID, allowNull: true, field: 'cancelled_by' })
+  cancelledByUserId: string | null;
 }

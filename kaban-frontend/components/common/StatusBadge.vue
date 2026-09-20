@@ -11,7 +11,7 @@ const props = withDefaults(defineProps<{
 })
 
 const CONFIG: Record<string, Record<string, string[]>> = {
-  job:      { pending: ['badge-pending','Pending'], printing: ['badge-printing','Printing'], ready: ['badge-ready','Ready'], delivered: ['badge-delivered','Delivered'] },
+  job:      { pending: ['badge-pending','Pending'], printing: ['badge-printing','Printing'], ready: ['badge-ready','Ready'], delivered: ['badge-delivered','Delivered'], cancelled: ['badge-cancelled','Cancelled'] },
   payment:  { paid: ['badge-paid','Paid'], unpaid: ['badge-unpaid','Unpaid'], pay_on_pickup: ['badge-pickup-pay','Pay on pickup'] },
   delivery: { pickup: ['badge-pickup','Pickup'], delivery: ['badge-delivery','Delivery'] },
 }

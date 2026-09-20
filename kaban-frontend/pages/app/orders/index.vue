@@ -158,7 +158,7 @@ const emptyMessage = computed(() => {
 })
 
 function statusLabel(status: string) {
-  const map: Record<string, string> = { pending: 'Queued', printing: 'Printing', ready: 'Ready', delivered: 'Complete' }
+  const map: Record<string, string> = { pending: 'Queued', printing: 'Printing', ready: 'Ready', delivered: 'Complete', cancelled: 'Cancelled' }
   return map[status] ?? status
 }
 
@@ -168,6 +168,7 @@ function statusBadgeClass(status: string) {
     printing:  'bg-blue-100 text-blue-700',
     ready:     'bg-green-100 text-green-700',
     delivered: 'bg-gray-100 text-gray-600',
+    cancelled: 'bg-red-50 text-red-600',
   }
   return map[status] ?? 'bg-gray-100 text-gray-500'
 }

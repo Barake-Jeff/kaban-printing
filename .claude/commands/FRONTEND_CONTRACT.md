@@ -96,7 +96,8 @@ Response (always the same shape/message, whether or not the phone is registered)
   paymentMethod: 'mpesa' | 'pay_on_pickup',
   paymentStatus: 'unpaid' | 'paid' | 'pay_on_pickup',
   mpesaRef:      string | null,
-  status:        'pending' | 'printing' | 'ready' | 'delivered',
+  status:        'pending' | 'printing' | 'ready' | 'delivered' | 'cancelled',
+  cancelledAt:   string | null,   // set when status is 'cancelled'
   cost:          number,
   deliveryFee:   number,
   adminNotes:    string | null,
@@ -116,6 +117,53 @@ Same as above, plus:
   phone:        string,
 }
 ```
+
+---
+
+## Who can call what (admin API)
+
+`role: 'admin'` in a Nuxt page's meta means "any staff" (admin **or** clerk); `adminOnly: true` means admins only.
+The backend is the real gate: every admin route returns `401` without a token and `403` for a customer.
+
+| Routes | Clerk | Admin |
+|--------|-------|-------|
+| `GET /admin/jobs`, `/admin/stats`, `/admin/customers`, `/admin/customers/:id`, `/admin/customers/lookup`, `/admin/jobs/:id/file` | yes | yes |
+| `PATCH /admin/jobs/:id/status`, `/payment`, `/notes`, `/cancel` | yes | yes |
+| `GET` and `PATCH /admin/settings` | **403** | yes |
+| `GET /admin/staff` | **403** | yes |
+| `GET /admin/reports` | **403** | yes |
+| staff create / activate / deactivate, password requests, set user password | **403** | yes |
+
+The Reports and Settings pages are `adminOnly` and hidden from clerks' navigation. `DELETE /admin/jobs/:id` no
+longer exists, and neither does the duplicate `POST /admin/auth/create-staff` (use `POST /admin/staff`).
+
+## Cancelling a job
+
+### PATCH /api/admin/jobs/:id/cancel  (clerk or admin)
+
+Soft-cancel: the job is kept, with `status: 'cancelled'` and `cancelledAt` set. Returns the updated admin job
+(same shape as `PATCH /admin/jobs/:id/status`), so replace the row in place rather than removing it.
+
+| Status | When |
+|--------|------|
+| `409` | "This job has already been cancelled." / "A delivered job can't be cancelled." (only pending, printing and ready jobs can be cancelled) / "This job changed while you were cancelling it..." |
+| `400` | `:id` is not a uuid |
+| `404` | no such job |
+
+What cancelling does and doesn't do:
+- A payment still awaiting an M-Pesa confirmation is closed, so a late confirmation can't mark the job paid.
+- A payment already taken is **not** reversed: `paymentStatus` stays `paid` and staff refund the customer by hand
+  (the admin panel says so). The customer is not notified yet.
+- A cancelled job can't be advanced, reverted, marked paid (`409`) or paid for by STK push (`400`); notes still work.
+- `PATCH /admin/jobs/:id/status` only accepts `pending | printing | ready | delivered` (`400` for `cancelled`).
+- Cancelled jobs are excluded from `revenueToday`, `jobsToday`, the revenue/top-customer/method reports and a
+  customer's `totalJobs` / `totalSpent`; `jobsByStatus` reports them as their own slice. They still appear in
+  `GET /admin/jobs` and the customer's `GET /jobs/my-jobs` (with `status: 'cancelled'`), so UIs should show them as
+  cancelled (no progress tracker) and keep them out of "active" lists.
+
+### PATCH /api/admin/staff/:id/deactivate
+
+`409` "You can't deactivate your own account." (this also guarantees an active admin always remains).
 
 ---
 
@@ -414,7 +462,7 @@ pending request for them. Works for customers and clerks, at any time (no reques
 | `useAdminStore().updateJobStatus()`      | PATCH /api/admin/jobs/:id/status               |
 | `useAdminStore().markAsPaid(id)`         | PATCH /api/admin/jobs/:id/payment              |
 | `useAdminStore().saveNotes()`            | PATCH /api/admin/jobs/:id/notes                |
-| `useAdminStore().cancelJob(id)`          | DELETE /api/admin/jobs/:id                     |
+| `useAdminStore().cancelJob(id)`          | PATCH /api/admin/jobs/:id/cancel               |
 | `useAdminStore().lookupCustomer()`       | GET /api/admin/customers/lookup?house={house}  |
 | `useAdminStore().fetchJobFiles(id)`      | GET /api/admin/jobs/:id/file                   |
 | `useAdminStaff().fetchStaff()`          | GET /api/admin/staff                           |

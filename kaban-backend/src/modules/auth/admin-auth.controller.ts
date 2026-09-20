@@ -1,14 +1,10 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
 import { AdminLoginDto } from './dto/admin-login.dto';
-import { CreateStaffDto } from './dto/create-staff.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
-import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { UserRole } from '../users/models/user.model';
 
+// Staff accounts are created through POST /admin/staff (AdminController). There used to be a second,
+// duplicate creation route here; two implementations of one privileged action drift apart.
 @Controller('admin/auth')
 export class AdminAuthController {
   constructor(private readonly authService: AuthService) {}
@@ -17,12 +13,5 @@ export class AdminAuthController {
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   adminLogin(@Body() dto: AdminLoginDto) {
     return this.authService.adminLogin(dto);
-  }
-
-  @Post('create-staff')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(UserRole.ADMIN)
-  createStaff(@Body() dto: CreateStaffDto, @CurrentUser() user) {
-    return this.authService.createStaff(dto, user);
   }
 }

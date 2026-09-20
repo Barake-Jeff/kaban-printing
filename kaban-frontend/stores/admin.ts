@@ -87,25 +87,36 @@ export const useAdminStore = defineStore('admin', () => {
 
   async function updateJobStatus(jobId: string, status: Job['status']) {
     const api = useApi()
-    const res = await api<any>(`/admin/jobs/${jobId}/status`, {
-      method: 'PATCH',
-      body:   { status },
-    })
-    const updated = res.data as Job
-    const idx = jobs.value.findIndex(j => j.id === jobId)
-    if (idx >= 0) jobs.value[idx] = updated
-    if (selectedJob.value?.id === jobId) selectedJob.value = updated
-    toast.success(`Status updated to ${status}`)
+    try {
+      const res = await api<any>(`/admin/jobs/${jobId}/status`, {
+        method: 'PATCH',
+        body:   { status },
+      })
+      const updated = res.data as Job
+      const idx = jobs.value.findIndex(j => j.id === jobId)
+      if (idx >= 0) jobs.value[idx] = updated
+      if (selectedJob.value?.id === jobId) selectedJob.value = updated
+      toast.success(`Status updated to ${status}`)
+    } catch (e: any) {
+      // e.g. 409: someone else cancelled this job while it was open. Show why and resync.
+      toast.error(e?.data?.message ?? 'Could not update this job')
+      await fetchQueue()
+    }
   }
 
   async function markAsPaid(jobId: string) {
     const api = useApi()
-    await api(`/admin/jobs/${jobId}/payment`, { method: 'PATCH' })
-    const job = jobs.value.find(j => j.id === jobId)
-    if (job) { job.paymentStatus = 'paid'; (job as any).mpesaRef = null }
-    if (selectedJob.value?.id === jobId) selectedJob.value!.paymentStatus = 'paid'
-    alerts.value = alerts.value.filter(a => a.jobId !== jobId)
-    toast.success('Marked as paid')
+    try {
+      await api(`/admin/jobs/${jobId}/payment`, { method: 'PATCH' })
+      const job = jobs.value.find(j => j.id === jobId)
+      if (job) { job.paymentStatus = 'paid'; (job as any).mpesaRef = null }
+      if (selectedJob.value?.id === jobId) selectedJob.value!.paymentStatus = 'paid'
+      alerts.value = alerts.value.filter(a => a.jobId !== jobId)
+      toast.success('Marked as paid')
+    } catch (e: any) {
+      toast.error(e?.data?.message ?? 'Could not mark this job as paid')
+      await fetchQueue()
+    }
   }
 
   async function saveNotes(jobId: string, notes: string) {
@@ -116,12 +127,25 @@ export const useAdminStore = defineStore('admin', () => {
     toast.success('Notes saved')
   }
 
+  /**
+   * Soft-cancel: the job stays on record with status 'cancelled' (so it moves to the Cancelled tab
+   * and stays visible in the customer's history) instead of being removed from the list.
+   */
   async function cancelJob(jobId: string) {
     const api = useApi()
-    await api(`/admin/jobs/${jobId}`, { method: 'DELETE' })
-    jobs.value = jobs.value.filter(j => j.id !== jobId)
-    if (selectedJob.value?.id === jobId) selectedJob.value = null
-    toast.success('Job cancelled')
+    try {
+      const res = await api<any>(`/admin/jobs/${jobId}/cancel`, { method: 'PATCH' })
+      const updated = res.data as Job
+      const idx = jobs.value.findIndex(j => j.id === jobId)
+      if (idx >= 0) jobs.value[idx] = updated
+      if (selectedJob.value?.id === jobId) selectedJob.value = updated
+      alerts.value = alerts.value.filter(a => a.jobId !== jobId)
+      toast.success('Job cancelled')
+    } catch (e: any) {
+      // e.g. 409: it was already cancelled, delivered, or changed by someone else meanwhile.
+      toast.error(e?.data?.message ?? 'Could not cancel this job')
+      await fetchQueue()
+    }
   }
 
   async function lookupCustomer(houseNumber: string): Promise<Customer | null> {
@@ -150,18 +174,26 @@ export const useAdminStore = defineStore('admin', () => {
 
   async function deactivateStaff(id: string) {
     const { deactivateStaff: deactivate } = useAdminStaff()
-    await deactivate(id)
-    const m = staff.value.find(s => s.id === id)
-    if (m) m.active = false
-    toast.success('Staff member deactivated')
+    try {
+      await deactivate(id)
+      const m = staff.value.find(s => s.id === id)
+      if (m) m.active = false
+      toast.success('Staff member deactivated')
+    } catch (e: any) {
+      toast.error(e?.data?.message ?? 'Could not deactivate this staff member')
+    }
   }
 
   async function reactivateStaff(id: string) {
     const { reactivateStaff: reactivate } = useAdminStaff()
-    await reactivate(id)
-    const m = staff.value.find(s => s.id === id)
-    if (m) m.active = true
-    toast.success('Staff member reactivated')
+    try {
+      await reactivate(id)
+      const m = staff.value.find(s => s.id === id)
+      if (m) m.active = true
+      toast.success('Staff member reactivated')
+    } catch (e: any) {
+      toast.error(e?.data?.message ?? 'Could not reactivate this staff member')
+    }
   }
 
   async function fetchSettings() {

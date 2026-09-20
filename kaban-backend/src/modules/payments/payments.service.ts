@@ -23,6 +23,9 @@ export class PaymentsService {
   async initiateStk(dto: InitiateMpesaDto, userId: string) {
     const job = await this.jobModel.findOne({ where: { id: dto.jobId, userId } });
     if (!job) throw new NotFoundException('Job not found');
+    if (job.status === JobStatus.CANCELLED) {
+      throw new BadRequestException('This job has been cancelled');
+    }
     if (job.paymentStatus === PaymentStatus.PAID) {
       throw new BadRequestException('Job is already paid');
     }

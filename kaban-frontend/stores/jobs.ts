@@ -14,29 +14,38 @@ export const useJobsStore = defineStore('jobs', () => {
     jobs.value.filter(j => ['pending', 'printing', 'ready'].includes(j.status))
   )
 
+  // Cancelled jobs aren't part of the customer's activity or spend.
   const jobsThisMonth = computed(() => {
     const now = new Date()
     return jobs.value.filter(j => {
       const d = new Date(j.createdAt)
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+      return j.status !== 'cancelled' && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
     }).length
   })
 
   const totalSpent = computed(() =>
-    jobs.value.reduce((sum, j) => sum + (j.paymentStatus === 'paid' ? (j.cost + j.deliveryFee) : 0), 0)
+    jobs.value.reduce((sum, j) => sum + (j.paymentStatus === 'paid' && j.status !== 'cancelled' ? (j.cost + j.deliveryFee) : 0), 0)
   )
 
-  async function fetchMyJobs() {
-    loading.value = true
-    error.value   = null
+  /**
+   * This store outlives client-side navigation, so a list fetched earlier goes stale: staff move
+   * jobs along or cancel them while the customer is elsewhere. `silent` refreshes in the
+   * background: no skeleton flash and no error banner if it fails, and the cached list stays on
+   * screen until the fresh one arrives.
+   */
+  async function fetchMyJobs({ silent = false }: { silent?: boolean } = {}) {
+    if (!silent) {
+      loading.value = true
+      error.value   = null
+    }
     try {
       const api = useApi()
       const res = await api<any>('/jobs/my-jobs', { params: { page: 1, size: 50 } })
       jobs.value = res.data?.jobs ?? []
     } catch (e: any) {
-      error.value = e?.data?.message ?? 'Failed to load jobs'
+      if (!silent) error.value = e?.data?.message ?? 'Failed to load jobs'
     } finally {
-      loading.value = false
+      if (!silent) loading.value = false
     }
   }
 

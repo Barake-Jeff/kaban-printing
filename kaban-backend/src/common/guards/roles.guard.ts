@@ -14,6 +14,8 @@ export class RolesGuard implements CanActivate {
     ]);
     if (!required) return true;
     const { user } = context.switchToHttp().getRequest();
+    // No authenticated user means the JWT guard didn't run first: deny instead of throwing a 500.
+    if (!user) return false;
     return required.includes(user.role);
   }
 }

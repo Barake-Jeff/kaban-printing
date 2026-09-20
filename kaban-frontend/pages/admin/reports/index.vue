@@ -150,7 +150,7 @@
 import { toast } from 'vue-sonner'
 import type { ReportData } from '~/types'
 
-definePageMeta({ layout: 'admin', middleware: 'auth', requiresAuth: true, role: 'admin' })
+definePageMeta({ layout: 'admin', middleware: 'auth', requiresAuth: true, role: 'admin', adminOnly: true })
 
 const activeTab = ref('Revenue')
 const loading   = ref(false)
@@ -185,9 +185,15 @@ const revenueChartOpts = computed(() => ({
   tooltip:  { y: { formatter: (v: number) => `KES ${v}` } },
 }))
 
+// Colour by status name, not by position: a status with no jobs is simply absent from the data,
+// which used to shift every later slice onto the wrong colour.
+const STATUS_COLORS: Record<string, string> = {
+  pending: '#f59e0b', printing: '#3b82f6', ready: '#22c55e', delivered: '#6b7280', cancelled: '#ef4444',
+}
+
 const statusDonutOpts = computed(() => ({
   labels:    data.value?.jobsByStatus.map(s => s.status.charAt(0).toUpperCase() + s.status.slice(1)) ?? [],
-  colors:    ['#f59e0b', '#3b82f6', '#22c55e', '#6b7280'],
+  colors:    data.value?.jobsByStatus.map(s => STATUS_COLORS[s.status] ?? '#9ca3af') ?? [],
   legend:    { position: 'bottom' as const },
   dataLabels: { enabled: true },
   chart:     { toolbar: { show: false } },

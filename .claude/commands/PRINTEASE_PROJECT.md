@@ -154,7 +154,6 @@ POST   /api/auth/logout            → revokes refresh token
 POST   /api/auth/forgot-password   → body: { phone } → queues an admin-visible request (no self-service reset yet)
 
 POST   /api/admin/auth/login       → staff login (clerk or admin only)
-POST   /api/admin/auth/create-staff → create clerk/admin account (admin role only)
 ```
 
 ### Jobs (customer-facing)
@@ -199,10 +198,10 @@ GET    /api/admin/customers/:id    → single customer by id (uuid)
 PATCH  /api/admin/jobs/:id/status  → { status: 'printing' | 'ready' | 'delivered' }
 PATCH  /api/admin/jobs/:id/payment → mark pay-on-pickup as paid
 PATCH  /api/admin/jobs/:id/notes   → { notes: string }
-DELETE /api/admin/jobs/:id         → cancel job
+PATCH  /api/admin/jobs/:id/cancel  → soft-cancel a job (clerk or admin; status → 'cancelled', row kept)
 GET    /api/admin/jobs/:id/file    → presigned download URL for job file (clerks/admins only)
 
-GET    /api/admin/staff            → list all clerks and admins
+GET    /api/admin/staff            → list all clerks and admins (admin only)
 POST   /api/admin/staff            → create staff member (admin only)
 PATCH  /api/admin/staff/:id/deactivate → soft-disable staff (admin only)
 PATCH  /api/admin/staff/:id/reactivate → re-enable staff (admin only)
@@ -211,10 +210,10 @@ GET    /api/admin/password-reset-requests → list pending forgot-password reque
 PATCH  /api/admin/password-reset-requests/:id/dismiss → resolve without changing password (admin only)
 PATCH  /api/admin/users/:id/password → set a new password for a non-admin user (admin only; 403 if target is admin)
 
-GET    /api/admin/settings         → { business, pricing, notificationMatrix }
-PATCH  /api/admin/settings         → partial update any settings section
+GET    /api/admin/settings         → (admin only) { business, pricing, notificationMatrix }
+PATCH  /api/admin/settings         → (admin only) partial update any settings section
 
-GET    /api/admin/reports          → { dailyRevenue, jobsByDayOfWeek, jobsByStatus,
+GET    /api/admin/reports          → (admin only) { dailyRevenue, jobsByDayOfWeek, jobsByStatus,
                                        avgFulfillmentHours, paymentMethodSplit, topCustomers }
 ```
 

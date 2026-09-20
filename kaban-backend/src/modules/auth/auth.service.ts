@@ -1,5 +1,5 @@
 import {
-  Injectable, Logger, UnauthorizedException, ConflictException, ForbiddenException,
+  Injectable, Logger, UnauthorizedException, ConflictException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
 import { JwtService } from '@nestjs/jwt';
@@ -12,7 +12,6 @@ import { PasswordResetRequest, PasswordResetRequestStatus } from './models/passw
 import { CustomerRegisterDto } from './dto/customer-register.dto';
 import { CustomerLoginDto } from './dto/customer-login.dto';
 import { AdminLoginDto } from './dto/admin-login.dto';
-import { CreateStaffDto } from './dto/create-staff.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { normalizeKenyanPhone } from '../../common/utils/phone.util';
 
@@ -71,24 +70,6 @@ export class AuthService {
       throw new UnauthorizedException('Account is deactivated. Contact an administrator.');
     }
     return this.issueTokens(user);
-  }
-
-  async createStaff(dto: CreateStaffDto, requestingUser: User) {
-    if (requestingUser.role !== UserRole.ADMIN) {
-      throw new ForbiddenException('Only admins can create staff accounts');
-    }
-    const phone = this.normalizePhone(dto.phone);
-    const existing = await this.userModel.findOne({ where: { phone } });
-    if (existing) throw new ConflictException('Phone number already registered');
-
-    const passwordHash = await bcrypt.hash(dto.password, 12);
-    const user = await this.userModel.create({
-      name: dto.name, phone, houseNumber: 'N/A',
-      estate: 'N/A', passwordHash, role: dto.role,
-    });
-
-    const { passwordHash: _, ...safeUser } = user.toJSON();
-    return safeUser;
   }
 
   async refresh(refreshToken: string) {

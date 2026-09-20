@@ -78,14 +78,17 @@ export class AdminService {
     const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
     const todayEnd   = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
+    // A cancelled job isn't business done: it stays out of today's count and revenue.
+    const notCancelled = { [Op.ne]: JobStatus.CANCELLED };
+
     const [jobsToday, pending, printing, ready, delivered, revenueRows] = await Promise.all([
-      this.jobModel.count({ where: { createdAt: { [Op.between]: [todayStart, todayEnd] } } }),
+      this.jobModel.count({ where: { status: notCancelled, createdAt: { [Op.between]: [todayStart, todayEnd] } } }),
       this.jobModel.count({ where: { status: JobStatus.PENDING } }),
       this.jobModel.count({ where: { status: JobStatus.PRINTING } }),
       this.jobModel.count({ where: { status: JobStatus.READY } }),
       this.jobModel.count({ where: { status: JobStatus.DELIVERED } }),
       this.jobModel.findAll({
-        where: { paymentStatus: PaymentStatus.PAID, createdAt: { [Op.between]: [todayStart, todayEnd] } },
+        where: { paymentStatus: PaymentStatus.PAID, status: notCancelled, createdAt: { [Op.between]: [todayStart, todayEnd] } },
         attributes: [[fn('SUM', literal('cost + delivery_fee')), 'total']],
         raw: true,
       }),
@@ -106,6 +109,9 @@ export class AdminService {
   async updateStatus(id: string, dto: UpdateJobStatusDto) {
     const job = await this.jobModel.findOne({ where: { id }, include: [{ model: User }] });
     if (!job) throw new NotFoundException('Job not found');
+    if (job.status === JobStatus.CANCELLED) {
+      throw new ConflictException('This job was cancelled and can no longer be changed.');
+    }
 
     const updates: Partial<Job> = { status: dto.status };
     if (dto.status === JobStatus.READY) {
@@ -152,6 +158,9 @@ export class AdminService {
   async markAsPaid(id: string) {
     const job = await this.jobModel.findOne({ where: { id } });
     if (!job) throw new NotFoundException('Job not found');
+    if (job.status === JobStatus.CANCELLED) {
+      throw new ConflictException("This job was cancelled, so it can't be marked as paid.");
+    }
     await job.update({ paymentStatus: PaymentStatus.PAID });
 
     const existing = await this.paymentModel.findOne({ where: { jobId: id } });
@@ -178,11 +187,47 @@ export class AdminService {
     return { success: true };
   }
 
-  async cancelJob(id: string) {
-    const job = await this.jobModel.findOne({ where: { id } });
+  /**
+   * Soft-cancel: the job stays on record (audit trail, and jobs with payments can't be deleted
+   * anyway: payments.job_id is a restrictive foreign key). Only pending, printing and ready jobs
+   * can be cancelled. Money already taken is left as is; refunding is a manual step.
+   */
+  async cancelJob(id: string, staff: User) {
+    const job = await this.jobModel.findOne({ where: { id }, include: [{ model: User }] });
     if (!job) throw new NotFoundException('Job not found');
-    await job.destroy();
-    return { success: true };
+    if (job.status === JobStatus.CANCELLED) throw new ConflictException('This job has already been cancelled.');
+    if (job.status === JobStatus.DELIVERED) throw new ConflictException("A delivered job can't be cancelled.");
+
+    const sequelize = (this.jobModel as any).sequelize;
+    const cancelled = await sequelize.transaction(async (transaction: any) => {
+      // Conditional on the status so two staff cancelling (or advancing) at once can't both win.
+      const [affected] = await this.jobModel.update(
+        {
+          status: JobStatus.CANCELLED,
+          cancelledAt: new Date(),
+          cancelledByUserId: staff.id,
+          readyAt: null,
+          readyOverdueNotifiedAt: null,
+        },
+        {
+          where: { id, status: { [Op.in]: [JobStatus.PENDING, JobStatus.PRINTING, JobStatus.READY] } },
+          transaction,
+        },
+      );
+      if (affected === 0) return false;
+
+      // An M-Pesa push still awaiting a callback is closed off, so a late callback (which only
+      // acts on pending payments) can't flip the cancelled job to paid.
+      await this.paymentModel.update(
+        { status: PaymentRecordStatus.CANCELLED },
+        { where: { jobId: id, status: PaymentRecordStatus.PENDING }, transaction },
+      );
+      return true;
+    });
+    if (!cancelled) throw new ConflictException('This job changed while you were cancelling it. Please refresh and try again.');
+
+    await job.reload();
+    return this.formatAdminJob(job);
   }
 
   async getFileUrl(jobId: string) {
@@ -271,7 +316,12 @@ export class AdminService {
     return this.formatStaff(member);
   }
 
-  async deactivateStaff(id: string) {
+  async deactivateStaff(id: string, actor: User) {
+    // The acting admin is always an active admin (JwtStrategy rejects inactive accounts on every
+    // request), so refusing self-deactivation also guarantees at least one active admin always
+    // remains: there is no in-app way back in from a locked-out admin account.
+    if (id === actor.id) throw new ConflictException("You can't deactivate your own account.");
+
     const member = await this.userModel.findOne({
       where: { id, role: { [Op.in]: [UserRole.CLERK, UserRole.ADMIN] } },
     });
@@ -390,11 +440,11 @@ export class AdminService {
       paymentMethodSplit,
       topCustomers,
     ] = await Promise.all([
-      // Revenue per day for past 14 days (paid jobs only)
+      // Revenue per day for past 14 days (paid jobs only; a cancelled job's money is refunded)
       sequelize.query(
         `SELECT DATE(created_at) AS date, SUM(cost + delivery_fee) AS revenue
          FROM jobs
-         WHERE payment_status = 'paid' AND created_at >= :cutoff
+         WHERE payment_status = 'paid' AND status <> 'cancelled' AND created_at >= :cutoff
          GROUP BY DATE(created_at)
          ORDER BY DATE(created_at) ASC`,
         { replacements: { cutoff: cutoff14 }, type: QueryTypes.SELECT },
@@ -403,11 +453,11 @@ export class AdminService {
       // Jobs by day of week (0=Sun … 6=Sat, MySQL DAYOFWEEK is 1=Sun)
       sequelize.query(
         `SELECT DAYOFWEEK(created_at) AS dow, COUNT(*) AS count
-         FROM jobs GROUP BY DAYOFWEEK(created_at)`,
+         FROM jobs WHERE status <> 'cancelled' GROUP BY DAYOFWEEK(created_at)`,
         { type: QueryTypes.SELECT },
       ) as Promise<{ dow: number; count: string }[]>,
 
-      // Jobs by status
+      // Jobs by status (cancelled deliberately included: it's its own slice)
       sequelize.query(
         `SELECT status, COUNT(*) AS count FROM jobs GROUP BY status`,
         { type: QueryTypes.SELECT },
@@ -422,7 +472,7 @@ export class AdminService {
 
       // Payment method split
       sequelize.query(
-        `SELECT payment_method AS method, COUNT(*) AS count FROM jobs GROUP BY payment_method`,
+        `SELECT payment_method AS method, COUNT(*) AS count FROM jobs WHERE status <> 'cancelled' GROUP BY payment_method`,
         { type: QueryTypes.SELECT },
       ) as Promise<{ method: string; count: string }[]>,
 
@@ -431,7 +481,7 @@ export class AdminService {
         `SELECT u.name, SUM(j.cost + j.delivery_fee) AS totalSpent, COUNT(j.id) AS totalJobs
          FROM jobs j
          JOIN users u ON j.user_id = u.id
-         WHERE j.payment_status = 'paid'
+         WHERE j.payment_status = 'paid' AND j.status <> 'cancelled'
          GROUP BY j.user_id, u.name
          ORDER BY totalSpent DESC
          LIMIT 5`,
@@ -484,12 +534,14 @@ export class AdminService {
     if (!userIds.length) return [];
     return this.jobModel.findAll({
       where: { userId: { [Op.in]: userIds } },
-      attributes: ['userId', 'paymentMethod', 'cost', 'deliveryFee', 'paymentStatus'],
+      attributes: ['userId', 'paymentMethod', 'cost', 'deliveryFee', 'paymentStatus', 'status'],
       raw: true,
     });
   }
 
-  private aggregateCustomer(user: User, jobs: any[]) {
+  private aggregateCustomer(user: User, allJobs: any[]) {
+    // Cancelled jobs aren't part of a customer's activity or spend.
+    const jobs = allJobs.filter(j => j.status !== JobStatus.CANCELLED);
     const paidJobs = jobs.filter(j => j.paymentStatus === 'paid');
     return {
       id:               user.id,
@@ -524,6 +576,7 @@ export class AdminService {
       mpesaRef:       raw.mpesaRef,
       status:         raw.status,
       readyAt:        raw.readyAt,
+      cancelledAt:    raw.cancelledAt ?? null,
       cost:           Number(raw.cost),
       deliveryFee:    Number(raw.deliveryFee),
       adminNotes:     raw.adminNotes ?? '',

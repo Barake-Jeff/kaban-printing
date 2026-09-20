@@ -49,8 +49,8 @@
             </span>
           </div>
 
-          <!-- Compact 5-step progress tracker -->
-          <div class="flex items-center mt-xs">
+          <!-- Compact 5-step progress tracker (a cancelled job has no progress to show) -->
+          <div v-if="job.status !== 'cancelled'" class="flex items-center mt-xs">
             <template v-for="(s, i) in progressSteps" :key="s.key">
               <div
                 :class="[
@@ -144,13 +144,21 @@
 </template>
 
 <script setup lang="ts">
+import { useDocumentVisibility } from '@vueuse/core'
+
 definePageMeta({ layout: 'customer', middleware: 'auth', requiresAuth: true, role: 'customer' })
 
 const auth   = useAuthStore()
 const jobs   = useJobsStore()
 const router = useRouter()
 
-onMounted(() => { if (!jobs.jobs.length) jobs.fetchMyJobs() })
+// Refresh whenever the dashboard opens and whenever the app comes back to the foreground (tab or
+// phone app switch): a job can be moved along or cancelled by staff while the customer is away.
+// Cached jobs stay on screen meanwhile; only a first-ever load shows the skeleton.
+onMounted(() => jobs.fetchMyJobs({ silent: jobs.jobs.length > 0 }))
+
+const visibility = useDocumentVisibility()
+watch(visibility, v => { if (v === 'visible') jobs.fetchMyJobs({ silent: true }) })
 
 const firstName     = computed(() => auth.user?.name?.split(' ')[0] ?? 'there')
 const hasActiveJobs = computed(() => jobs.activeJobs.length > 0)
@@ -178,7 +186,7 @@ function stepIndex(status: string) {
 }
 
 function statusLabel(status: string) {
-  const map: Record<string, string> = { pending: 'Queued', printing: 'Printing', ready: 'Ready', delivered: 'Complete' }
+  const map: Record<string, string> = { pending: 'Queued', printing: 'Printing', ready: 'Ready', delivered: 'Complete', cancelled: 'Cancelled' }
   return map[status] ?? status
 }
 
@@ -188,6 +196,7 @@ function statusBadgeClass(status: string) {
     printing:  'bg-blue-100 text-blue-700',
     ready:     'bg-green-100 text-green-700',
     delivered: 'bg-gray-100 text-gray-600',
+    cancelled: 'bg-red-50 text-red-600',
   }
   return map[status] ?? 'bg-gray-100 text-gray-500'
 }

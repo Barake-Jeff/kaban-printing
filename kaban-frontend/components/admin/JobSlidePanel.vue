@@ -48,6 +48,14 @@
       <!-- Body -->
       <div class="flex-1 px-5 py-4 space-y-5">
 
+        <!-- Cancelled: the job stays on record, read-only -->
+        <div v-if="isCancelled" class="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-700">
+          <p class="font-semibold">Cancelled{{ cancelledOn ? ` on ${cancelledOn}` : '' }}</p>
+          <p v-if="job.paymentStatus === 'paid'" class="mt-1 text-xs">
+            This job was paid. Refund the customer manually.
+          </p>
+        </div>
+
         <!-- Customer -->
         <section>
           <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Customer</p>
@@ -104,14 +112,14 @@
             </span>
           </div>
           <button
-            v-if="job.paymentStatus !== 'paid'"
+            v-if="job.paymentStatus !== 'paid' && !isCancelled"
             @click="$emit('mark-paid', job.id)"
             class="mt-2 w-full py-2 text-sm font-semibold text-green-700 bg-green-50 hover:bg-green-100 rounded-xl transition-colors"
           >Mark as paid</button>
         </section>
 
-        <!-- Status -->
-        <section>
+        <!-- Status (a cancelled job can't be moved through the workflow any more) -->
+        <section v-if="!isCancelled">
           <p class="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-2">Status</p>
           <div class="flex flex-wrap gap-2">
             <button
@@ -142,7 +150,7 @@
       </div>
 
       <!-- Footer -->
-      <div class="sticky bottom-0 bg-white border-t border-gray-100 px-5 pt-4 pb-6 flex items-center gap-3">
+      <div v-if="canCancel" class="sticky bottom-0 bg-white border-t border-gray-100 px-5 pt-4 pb-6 flex items-center gap-3">
         <button
           v-if="nextStatus"
           @click="$emit('update-status', job.id, nextStatus)"
@@ -150,12 +158,24 @@
           style="background-color: #021745;"
         >Advance → {{ statusLabel(nextStatus) }}</button>
         <button
-          @click="$emit('cancel', job.id)"
+          @click="cancelConfirmOpen = true"
           class="px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 rounded-xl transition-colors font-medium"
         >Cancel job</button>
       </div>
     </div>
   </Transition>
+
+  <AdminConfirmDialog
+    v-model="cancelConfirmOpen"
+    title="Cancel this job?"
+    :description="job?.paymentStatus === 'paid'
+      ? 'The job stays on record, marked Cancelled. It was already paid, so remember to refund the customer.'
+      : 'The job stays on record, marked Cancelled. This can\'t be undone.'"
+    confirm-label="Cancel job"
+    cancel-label="Keep job"
+    :danger="true"
+    @confirm="job && $emit('cancel', job.id)"
+  />
 
   <AdminConfirmDialog
     v-model="revertConfirmOpen"
@@ -210,6 +230,16 @@ const nextStatus = computed<Job['status'] | null>(() => {
 const revertConfirmOpen = ref(false)
 const revertTarget = ref<Job['status'] | null>(null)
 
+// Only pending, printing and ready jobs can be cancelled (the server enforces the same rule).
+const cancelConfirmOpen = ref(false)
+const isCancelled = computed(() => props.job?.status === 'cancelled')
+const canCancel = computed(() => !!props.job && ['pending', 'printing', 'ready'].includes(props.job.status))
+const cancelledOn = computed(() =>
+  props.job?.cancelledAt
+    ? new Date(props.job.cancelledAt).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' })
+    : '',
+)
+
 function onStatusClick(s: Job['status']) {
   if (!props.job || s === props.job.status) return
   const isRevert = statusOrder.indexOf(s) < statusOrder.indexOf(props.job.status)
@@ -227,7 +257,7 @@ function confirmRevert() {
 }
 
 function statusLabel(s: Job['status']) {
-  return { pending: 'Pending', printing: 'Printing', ready: 'Ready', delivered: 'Delivered' }[s]
+  return { pending: 'Pending', printing: 'Printing', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' }[s]
 }
 
 function statusActiveCls(s: Job['status']) {
@@ -236,6 +266,7 @@ function statusActiveCls(s: Job['status']) {
     printing:  'border-blue-400 bg-blue-50 text-blue-700',
     ready:     'border-green-400 bg-green-50 text-green-700',
     delivered: 'border-gray-400 bg-gray-100 text-gray-700',
+    cancelled: 'border-red-300 bg-red-50 text-red-600',
   }[s]
 }
 

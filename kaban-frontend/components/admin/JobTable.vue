@@ -121,7 +121,7 @@ function nextStatus(job: Job): Job['status'] | null {
 }
 
 function statusLabel(s: string) {
-  return { pending: 'Pending', printing: 'Printing', ready: 'Ready', delivered: 'Delivered' }[s] ?? s
+  return { pending: 'Pending', printing: 'Printing', ready: 'Ready', delivered: 'Delivered', cancelled: 'Cancelled' }[s] ?? s
 }
 
 function paymentLabel(s: string) {
@@ -134,6 +134,7 @@ function statusBadgeCls(s: string) {
     printing:  'bg-blue-100 text-blue-700',
     ready:     'bg-green-100 text-green-700',
     delivered: 'bg-gray-100 text-gray-600',
+    cancelled: 'bg-red-50 text-red-600',
   }[s] ?? 'bg-gray-100 text-gray-600'
 }
 
@@ -154,6 +155,7 @@ function waitStartTime(job: Job): number {
 }
 
 function waitTime(job: Job): string {
+  if (job.status === 'cancelled') return '—'
   if (job.status === 'delivered') return 'DONE'
   const mins = Math.floor((Date.now() - waitStartTime(job)) / 60000)
   if (mins < 60) return `${mins}m`
@@ -161,6 +163,7 @@ function waitTime(job: Job): string {
 }
 
 function waitColor(job: Job): string {
+  if (job.status === 'cancelled') return 'text-gray-400'
   if (job.status === 'delivered') return 'text-green-600'
   const mins = Math.floor((Date.now() - waitStartTime(job)) / 60000)
   if (mins >= 60) return 'text-red-600'

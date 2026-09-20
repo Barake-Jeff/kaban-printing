@@ -15,7 +15,7 @@
       <h1 class="font-headline-md text-headline-md text-on-primary font-bold truncate">{{ jobTitle }}</h1>
     </div>
     <div class="text-on-primary/80 font-label-bold text-label-bold uppercase flex-shrink-0">
-      {{ isComplete ? 'Complete' : topBarStatus }}
+      {{ isCancelled ? 'Cancelled' : isComplete ? 'Complete' : topBarStatus }}
     </div>
   </header>
 
@@ -49,6 +49,43 @@
           Back to orders
         </button>
       </div>
+    </template>
+
+    <!-- ══════════════════════════════════════════════════════════
+         CANCELLED STATE (no progress tracker: there is no progress to show)
+         ══════════════════════════════════════════════════════════ -->
+    <template v-else-if="isCancelled">
+      <div class="flex justify-between items-center">
+        <span class="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-widest">Order Status</span>
+        <div class="bg-red-100 text-red-700 px-sm py-1 rounded-[4px] font-status-badge text-status-badge">
+          CANCELLED
+        </div>
+      </div>
+
+      <section class="bg-surface-container-low p-md rounded-xl flex flex-col gap-sm">
+        <div class="flex items-start gap-sm">
+          <span class="material-symbols-outlined text-on-surface-variant">cancel</span>
+          <div class="flex flex-col gap-xs">
+            <p class="font-label-bold text-label-bold text-on-surface">
+              This order was cancelled{{ cancelledOn ? ` on ${cancelledOn}` : '' }}.
+            </p>
+            <p class="font-body-sm text-body-sm text-on-surface-variant">
+              {{ job?.fileName ?? 'Custom instructions' }} · {{ job?.pages }} pages · KES {{ (job?.cost ?? 0) + (job?.deliveryFee ?? 0) }}
+            </p>
+            <p v-if="job?.paymentStatus === 'paid'" class="font-body-sm text-body-sm text-on-surface mt-sm">
+              You had already paid for this order. Please contact us about your refund.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <button
+        @click="router.push('/app/orders')"
+        class="h-12 rounded-lg text-on-primary font-label-bold text-label-bold uppercase active:scale-95 transition-transform"
+        style="background-color: #F97316;"
+      >
+        Back to orders
+      </button>
     </template>
 
     <!-- ══════════════════════════════════════════════════════════
@@ -336,6 +373,12 @@ watch(job, (j) => {
 }, { immediate: true })
 
 const isComplete = computed(() => job.value?.status === 'delivered')
+const isCancelled = computed(() => job.value?.status === 'cancelled')
+const cancelledOn = computed(() =>
+  job.value?.cancelledAt
+    ? new Date(job.value.cancelledAt).toLocaleDateString('en-KE', { month: 'short', day: 'numeric', year: 'numeric' })
+    : '',
+)
 
 const progressSteps = [
   { key: 'received',  label: 'Received',  icon: 'inbox'          },

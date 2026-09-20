@@ -16,16 +16,34 @@
         <h1 class="font-headline-md text-headline-md text-on-primary font-bold">{{ job?.id }}</h1>
       </div>
       <div class="text-on-primary/80 font-label-bold text-label-bold uppercase">
-        {{ isComplete ? '' : topBarStatus }}
+        {{ isCancelled ? 'Cancelled' : isComplete ? '' : topBarStatus }}
       </div>
     </header>
 
     <main class="pt-16 px-margin-mobile flex flex-col gap-xl">
 
       <!-- ══════════════════════════════════════════════════════════
+           CANCELLED STATE (no progress tracker: there is no progress to show)
+           ══════════════════════════════════════════════════════════ -->
+      <template v-if="isCancelled">
+        <div class="flex justify-between items-center">
+          <span class="font-label-bold text-label-bold text-on-surface-variant uppercase tracking-widest">Order Status</span>
+          <div class="bg-red-100 text-red-700 px-sm py-1 rounded-[4px] font-status-badge text-status-badge">
+            CANCELLED
+          </div>
+        </div>
+        <section class="bg-surface-container-low p-md rounded-xl flex flex-col gap-xs">
+          <p class="font-label-bold text-label-bold text-on-surface">This order was cancelled.</p>
+          <p v-if="job?.paymentStatus === 'paid'" class="font-body-sm text-body-sm text-on-surface">
+            You had already paid for this order. Please contact us about your refund.
+          </p>
+        </section>
+      </template>
+
+      <!-- ══════════════════════════════════════════════════════════
            COMPLETE STATE (delivered)
            ══════════════════════════════════════════════════════════ -->
-      <template v-if="isComplete">
+      <template v-else-if="isComplete">
 
         <!-- Status label + badge -->
         <div class="flex justify-between items-center">
@@ -316,6 +334,7 @@ const notifWhatsapp = ref(job.value?.notifyWhatsapp  ?? false)
 const filledIcon    = "font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24;"
 
 const isComplete = computed(() => job.value?.status === 'delivered')
+const isCancelled = computed(() => job.value?.status === 'cancelled')
 
 const progressSteps = [
   { key: 'received',  label: 'Received',  icon: 'inbox'          },

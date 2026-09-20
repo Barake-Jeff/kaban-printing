@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, ParseUUIDPipe, Query, UseGuards,
+  Controller, Get, Post, Patch, Body, Param, ParseUUIDPipe, Query, UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { parsePagination } from '../../common/utils/pagination.util';
@@ -14,6 +14,9 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { SaveSettingsDto } from './dto/save-settings.dto';
 import { SetUserPasswordDto } from './dto/set-user-password.dto';
 
+// Clerks run the counter: the queue, job status/payment/notes/files, customers and the dashboard.
+// Everything that configures the business or exposes its finances or staff (settings, staff, reports,
+// password resets) carries its own @Roles(UserRole.ADMIN), which overrides this class-level default.
 @Controller('admin')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(UserRole.CLERK, UserRole.ADMIN)
@@ -76,9 +79,10 @@ export class AdminController {
     return this.adminService.saveNotes(id, dto);
   }
 
-  @Delete('jobs/:id')
-  cancelJob(@Param('id') id: string) {
-    return this.adminService.cancelJob(id);
+  // Soft-cancel (replaces the old hard DELETE): the job stays on record marked cancelled.
+  @Patch('jobs/:id/cancel')
+  cancelJob(@Param('id', ParseUUIDPipe) id: string, @CurrentUser() user: User) {
+    return this.adminService.cancelJob(id, user);
   }
 
   @Get('jobs/:id/file')
@@ -89,6 +93,7 @@ export class AdminController {
   // ── Staff (admin only) ─────────────────────────────────────────────────────
 
   @Get('staff')
+  @Roles(UserRole.ADMIN)
   getStaff() {
     return this.adminService.getStaff();
   }
@@ -101,8 +106,8 @@ export class AdminController {
 
   @Patch('staff/:id/deactivate')
   @Roles(UserRole.ADMIN)
-  deactivateStaff(@Param('id') id: string) {
-    return this.adminService.deactivateStaff(id);
+  deactivateStaff(@Param('id') id: string, @CurrentUser() user: User) {
+    return this.adminService.deactivateStaff(id, user);
   }
 
   @Patch('staff/:id/reactivate')
@@ -134,11 +139,13 @@ export class AdminController {
   // ── Settings ───────────────────────────────────────────────────────────────
 
   @Get('settings')
+  @Roles(UserRole.ADMIN)
   getSettings() {
     return this.adminService.getSettings();
   }
 
   @Patch('settings')
+  @Roles(UserRole.ADMIN)
   saveSettings(@Body() dto: SaveSettingsDto) {
     return this.adminService.saveSettings(dto);
   }
@@ -146,6 +153,7 @@ export class AdminController {
   // ── Reports ────────────────────────────────────────────────────────────────
 
   @Get('reports')
+  @Roles(UserRole.ADMIN)
   getReports() {
     return this.adminService.getReports();
   }

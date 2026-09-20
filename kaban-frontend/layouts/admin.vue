@@ -194,8 +194,8 @@ const allNavItems = [
   { name: 'Queue',     icon: 'pending_actions', route: 'admin-queue',             exact: false, adminOnly: false },
   { name: 'Customers', icon: 'group',           route: 'admin-customers',         exact: false, adminOnly: false },
   { name: 'Password requests', icon: 'lock_reset', route: 'admin-password-requests', exact: false, adminOnly: true },
-  { name: 'Reports',   icon: 'assessment',      route: 'admin-reports',           exact: false, adminOnly: false },
-  { name: 'Settings',  icon: 'settings',        route: 'admin-settings',          exact: false, adminOnly: false },
+  { name: 'Reports',   icon: 'assessment',      route: 'admin-reports',           exact: false, adminOnly: true },
+  { name: 'Settings',  icon: 'settings',        route: 'admin-settings',          exact: false, adminOnly: true },
 ]
 
 // The backend only lets admins (not clerks) touch password resets.
@@ -272,8 +272,8 @@ useEventListener('keydown', (e: KeyboardEvent) => {
     if (k === 'd') router.push({ name: 'admin' })
     else if (k === 'q') router.push({ name: 'admin-queue' })
     else if (k === 'c') router.push({ name: 'admin-customers' })
-    else if (k === 'r') router.push({ name: 'admin-reports' })
-    else if (k === 's') router.push({ name: 'admin-settings' })
+    else if (k === 'r' && isFullAdmin.value) router.push({ name: 'admin-reports' })
+    else if (k === 's' && isFullAdmin.value) router.push({ name: 'admin-settings' })
   }
 })
 

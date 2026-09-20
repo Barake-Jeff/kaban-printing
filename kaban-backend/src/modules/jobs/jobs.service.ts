@@ -169,6 +169,7 @@ export class JobsService {
       adminNotes:    raw.adminNotes ?? '',
       notifySms:     user?.notifSms      ?? true,
       notifyWhatsapp: user?.notifWhatsapp ?? false,
+      cancelledAt:   raw.cancelledAt ?? null,
       createdAt:     raw.createdAt,
       updatedAt:     raw.updatedAt,
     };

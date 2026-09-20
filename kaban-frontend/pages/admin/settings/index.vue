@@ -168,16 +168,18 @@
                         @click="openReset(member)"
                         class="text-xs text-primary hover:underline font-medium"
                       >Reset password</button>
+                      <!-- You can't deactivate your own account (the backend refuses it too). -->
                       <button
-                        v-if="member.active"
+                        v-if="member.active && member.id !== auth.user?.id"
                         @click="() => { deactivateTarget = member.id; confirmOpen = true }"
                         class="text-xs text-red-500 hover:text-red-700 font-medium"
                       >Deactivate</button>
                       <button
-                        v-else
+                        v-else-if="!member.active"
                         @click="adminStore.reactivateStaff(member.id)"
                         class="text-xs text-green-600 hover:text-green-800 font-medium"
                       >Reactivate</button>
+                      <span v-else class="text-xs text-gray-400">You</span>
                     </div>
                   </td>
                 </tr>
@@ -287,7 +289,7 @@
 import { toast } from 'vue-sonner'
 import type { SettingsState, NotificationTrigger, StaffMember } from '~/types'
 
-definePageMeta({ layout: 'admin', middleware: 'auth', requiresAuth: true, role: 'admin' })
+definePageMeta({ layout: 'admin', middleware: 'auth', requiresAuth: true, role: 'admin', adminOnly: true })
 
 const adminStore = useAdminStore()
 const auth       = useAuthStore()
