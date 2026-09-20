@@ -1,8 +1,10 @@
 import {
   Injectable, OnModuleInit, Logger, NotFoundException,
   BadRequestException, InternalServerErrorException,
+  HttpException, HttpStatus, ServiceUnavailableException,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
+import { Op } from 'sequelize';
 import { ConfigService } from '@nestjs/config';
 import * as Minio from 'minio';
 import { PDFParse } from 'pdf-parse';
@@ -14,6 +16,11 @@ import * as fs from 'fs/promises';
 import { v4 as uuid } from 'uuid';
 import { File } from './models/file.model';
 import { User, UserRole } from '../users/models/user.model';
+import {
+  MAX_UPLOADS_PER_DAY, QUOTA_WINDOW_MS,
+  MAX_CONCURRENT_CONVERSIONS, MAX_QUEUED_CONVERSIONS,
+} from '../../common/constants/limits';
+import { ConcurrencyLimiter, LimiterFullError } from '../../common/utils/concurrency-limiter.util';
 
 const execFileAsync = promisify(execFile);
 
@@ -24,6 +31,7 @@ function errorMessage(err: unknown): string {
 @Injectable()
 export class FilesService implements OnModuleInit {
   private readonly logger = new Logger(FilesService.name);
+  private readonly conversionLimiter = new ConcurrencyLimiter(MAX_CONCURRENT_CONVERSIONS, MAX_QUEUED_CONVERSIONS);
   private readonly client: Minio.Client;
   private readonly publicClient: Minio.Client;
   private readonly bucket: string;
@@ -69,6 +77,15 @@ export class FilesService implements OnModuleInit {
   }
 
   async processUpload(file: Express.Multer.File, userId: string) {
+    // Checked before touching MinIO or LibreOffice. Concurrent requests can overshoot by
+    // at most the per-minute throttle, which is fine for a cost cap.
+    const recentUploads = await this.fileModel.count({
+      where: { userId, createdAt: { [Op.gte]: new Date(Date.now() - QUOTA_WINDOW_MS) } },
+    });
+    if (recentUploads >= MAX_UPLOADS_PER_DAY) {
+      throw new HttpException('Daily upload limit reached. Please try again tomorrow.', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
     const ext        = file.originalname.split('.').pop()?.toLowerCase() ?? 'bin';
     const id         = uuid();
     const storedName = `${id}.${ext}`;
@@ -86,7 +103,7 @@ export class FilesService implements OnModuleInit {
       pdfKey    = fileKey;
       pageCount = await this.getPdfPageCount(file.buffer);
     } else if (this.isConvertibleDocument(file.mimetype)) {
-      const pdfBuffer = await this.convertToPdf(file.buffer, ext, id);
+      const pdfBuffer = await this.runConversion(() => this.convertToPdf(file.buffer, ext, id));
       pdfKey = `pdfs/${userId}/${id}.pdf`;
       await this.client.putObject(this.bucket, pdfKey, pdfBuffer, pdfBuffer.length, {
         'Content-Type': 'application/pdf',
@@ -132,6 +149,17 @@ export class FilesService implements OnModuleInit {
       throw new BadRequestException('Unable to read PDF — the file may be corrupted or encrypted');
     } finally {
       await parser.destroy();
+    }
+  }
+
+  private async runConversion(task: () => Promise<Buffer>): Promise<Buffer> {
+    try {
+      return await this.conversionLimiter.run(task);
+    } catch (err) {
+      if (err instanceof LimiterFullError) {
+        throw new ServiceUnavailableException('Server is busy converting documents, please retry shortly');
+      }
+      throw err;
     }
   }
 

@@ -136,10 +136,21 @@ Same as above, plus:
 
 ## Customer list
 
-### GET /api/admin/customers
+### GET /api/admin/customers?page=1&size=24&search=
+
+Paginated. `page` ≥ 1; `size` is clamped to 1–100 (default 24). `search` (optional, max 50
+chars) matches name, house number or phone, case-insensitive; `%` and `_` are literal.
+Newest customers first.
 
 ```typescript
-// Returns array of:
+{
+  customers: Array<Customer>,   // Customer = the object below
+  total:     number,            // total matches, across all pages
+  page:      number,            // the page actually served (after clamping)
+  size:      number,
+}
+
+// Customer
 {
   id:               string,
   name:             string,
@@ -152,9 +163,39 @@ Same as above, plus:
 }
 ```
 
+This used to return a bare array of every customer. Don't scan the list for a single customer —
+use `GET /admin/customers/:id`.
+
+### GET /api/admin/customers/:id
+
+Returns one `Customer` (shape above). `400` if `:id` isn't a UUID, `404` if it doesn't exist
+or isn't a customer account.
+
 ### GET /api/admin/customers/lookup?house=14B
 
 Returns single customer object or 404.
+
+---
+
+## Pagination and limits (all list endpoints)
+
+`GET /jobs/my-jobs`, `GET /admin/jobs`, `GET /admin/customers` and `GET /notifications` never
+error on odd `page`/`size`/`limit` values: non-numeric, zero or negative fall back to the
+endpoint default, and `size`/`limit` is capped at **100**. Always read `page`/`size` from the
+response rather than assuming what was requested.
+
+Status codes a client should handle gracefully (the message is user-safe, show it as-is):
+
+| Status | When |
+|--------|------|
+| `429`  | Rate limit hit (per-route per-minute limit), or a daily quota: 50 uploads / 100 jobs per user per rolling 24h |
+| `413`  | Upload larger than 20 MB |
+| `503`  | Document conversion queue is full — retry shortly |
+| `400`  | Over-limit input: `copies` > 1000, `instructions` > 2000 chars |
+
+Rate limits are per signed-in user (per IP for login/register/forgot-password and other
+anonymous calls). Uploads: 10/min, job creation: 20/min, M-Pesa STK push: 5/min,
+change-password: 5/min.
 
 ---
 
@@ -333,7 +374,8 @@ pending request for them. Works for customers and clerks, at any time (no reques
 | `useJobsStore().initiateMpesa(jobId)`    | POST /api/payments/mpesa/stk                   |
 | `useAdminStore().fetchQueue()`           | GET /api/admin/jobs                            |
 | `useAdminStore().fetchStats()`           | GET /api/admin/stats                           |
-| `useAdminStore().fetchCustomers()`       | GET /api/admin/customers                       |
+| `useAdminStore().fetchCustomers({page,size,search})` | GET /api/admin/customers?page=&size=&search= |
+| `useAdminStore().fetchCustomer(id)`      | GET /api/admin/customers/:id                   |
 | `useAdminStore().updateJobStatus()`      | PATCH /api/admin/jobs/:id/status               |
 | `useAdminStore().markAsPaid(id)`         | PATCH /api/admin/jobs/:id/payment              |
 | `useAdminStore().saveNotes()`            | PATCH /api/admin/jobs/:id/notes                |

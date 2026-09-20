@@ -1,6 +1,7 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { parsePagination } from '../../common/utils/pagination.util';
 import { User } from '../users/models/user.model';
 import { NotificationsService } from './notifications.service';
 
@@ -12,12 +13,10 @@ export class NotificationsController {
   @Get()
   async getMyNotifications(
     @CurrentUser() user: User,
-    @Query('limit') limit = '30',
+    @Query('limit') limit?: string,
   ) {
-    const notifications = await this.notificationsService.getForUser(
-      user.id,
-      Math.min(Number(limit), 100),
-    );
+    const { size } = parsePagination(1, limit, { defaultSize: 30 });
+    const notifications = await this.notificationsService.getForUser(user.id, size);
     return { statusCode: 200, message: 'ok', data: { notifications } };
   }
 }

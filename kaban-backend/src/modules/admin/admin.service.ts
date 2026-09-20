@@ -16,6 +16,7 @@ import { CreateStaffDto } from './dto/create-staff.dto';
 import { SaveSettingsDto } from './dto/save-settings.dto';
 import { SetUserPasswordDto } from './dto/set-user-password.dto';
 import { DEFAULT_PRICING } from '../../common/utils/pricing.util';
+import { Pagination } from '../../common/utils/pagination.util';
 
 const DEFAULT_SETTINGS = {
   business: {
@@ -194,33 +195,49 @@ export class AdminService {
 
   // ── Customers ──────────────────────────────────────────────────────────────
 
-  async getCustomers() {
-    const users = await this.userModel.findAll({
-      where: { role: 'customer' },
-      order: [['createdAt', 'DESC']],
+  async getCustomers({ page, size, offset }: Pagination, search?: string) {
+    const where: any = { role: UserRole.CUSTOMER };
+
+    const term = typeof search === 'string' ? search.trim().slice(0, 50) : '';
+    if (term) {
+      // Escape LIKE wildcards so a search for "%" or "_" matches literally.
+      const like = `%${term.replace(/[\\%_]/g, '\\$&')}%`;
+      where[Op.or] = [
+        { name:        { [Op.like]: like } },
+        { houseNumber: { [Op.like]: like } },
+        { phone:       { [Op.like]: like } },
+      ];
+    }
+
+    const { rows: users, count: total } = await this.userModel.findAndCountAll({
+      where,
+      // id tiebreaker keeps page boundaries stable when createdAt collides.
+      order:  [['createdAt', 'DESC'], ['id', 'ASC']],
+      limit:  size,
+      offset,
     });
-    if (!users.length) return [];
 
-    const jobs = await this.jobModel.findAll({
-      where: { userId: { [Op.in]: users.map(u => u.id) } },
-      attributes: ['userId', 'paymentMethod', 'cost', 'deliveryFee', 'paymentStatus'],
-      raw: true,
-    }) as any[];
+    const jobs = await this.customerJobRows(users.map(u => u.id));
+    return {
+      customers: users.map(u => this.aggregateCustomer(u, jobs.filter(j => j.userId === u.id))),
+      total,
+      page,
+      size,
+    };
+  }
 
-    return users.map(u => this.aggregateCustomer(u, jobs.filter(j => j.userId === u.id)));
+  async getCustomer(id: string) {
+    const user = await this.userModel.findOne({ where: { id, role: UserRole.CUSTOMER } });
+    if (!user) throw new NotFoundException('Customer not found');
+
+    return this.aggregateCustomer(user, await this.customerJobRows([user.id]));
   }
 
   async lookupCustomer(house: string) {
     const user = await this.userModel.findOne({ where: { houseNumber: house } });
     if (!user) throw new NotFoundException(`No customer at house ${house}`);
 
-    const jobs = await this.jobModel.findAll({
-      where: { userId: user.id },
-      attributes: ['userId', 'paymentMethod', 'cost', 'deliveryFee', 'paymentStatus'],
-      raw: true,
-    }) as any[];
-
-    return this.aggregateCustomer(user, jobs);
+    return this.aggregateCustomer(user, await this.customerJobRows([user.id]));
   }
 
   // ── Staff ──────────────────────────────────────────────────────────────────
@@ -459,6 +476,15 @@ export class AdminService {
       active:   user.active,
       joinedAt: (user as any).createdAt?.toISOString?.() ?? new Date().toISOString(),
     };
+  }
+
+  private async customerJobRows(userIds: string[]): Promise<any[]> {
+    if (!userIds.length) return [];
+    return this.jobModel.findAll({
+      where: { userId: { [Op.in]: userIds } },
+      attributes: ['userId', 'paymentMethod', 'cost', 'deliveryFee', 'paymentStatus'],
+      raw: true,
+    });
   }
 
   private aggregateCustomer(user: User, jobs: any[]) {

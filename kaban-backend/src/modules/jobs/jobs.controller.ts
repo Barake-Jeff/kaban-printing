@@ -1,5 +1,7 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { parsePagination } from '../../common/utils/pagination.util';
 import { OwnershipGuard } from '../../common/guards/ownership.guard';
 import { CheckOwnership } from '../../common/decorators/check-ownership.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -14,6 +16,7 @@ export class JobsController {
   constructor(private readonly jobsService: JobsService) {}
 
   @Post()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
   create(@Body() dto: CreateJobDto, @CurrentUser() user: User) {
     return this.jobsService.create(dto, user);
   }
@@ -21,10 +24,11 @@ export class JobsController {
   @Get('my-jobs')
   getMyJobs(
     @CurrentUser() user: User,
-    @Query('page') page = '1',
-    @Query('size') size = '10',
+    @Query('page') page?: string,
+    @Query('size') size?: string,
   ) {
-    return this.jobsService.findMyJobs(user.id, Number(page), Number(size));
+    const p = parsePagination(page, size, { defaultSize: 10 });
+    return this.jobsService.findMyJobs(user.id, p.page, p.size);
   }
 
   // Must stay ahead of the ':id' route below, or "pricing" gets matched as an id.

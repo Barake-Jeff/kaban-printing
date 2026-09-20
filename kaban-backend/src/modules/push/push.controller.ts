@@ -1,4 +1,5 @@
 import { Controller, Get, Post, Delete, Body, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { PushService } from './push.service';
 import { SubscribeDto } from './dto/subscribe.dto';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -15,6 +16,7 @@ export class PushController {
   }
 
   @Post('subscribe')
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @UseGuards(JwtAuthGuard)
   async subscribe(@Body() dto: SubscribeDto, @CurrentUser() user: User) {
     await this.pushService.subscribe(user.id, dto.endpoint, dto.p256dh, dto.auth);

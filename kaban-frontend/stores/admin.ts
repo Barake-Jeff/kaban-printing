@@ -9,6 +9,7 @@ export const useAdminStore = defineStore('admin', () => {
   const stats       = ref<AdminStats>({ jobsToday: 0, pending: 0, completed: 0, revenueToday: 0 })
   const alerts      = ref<Alert[]>([])
   const customers   = ref<Customer[]>([])
+  const customersTotal = ref(0)
   const loading     = ref(false)
   const selectedJob = ref<Job | null>(null)
 
@@ -59,10 +60,29 @@ export const useAdminStore = defineStore('admin', () => {
     stats.value = res.data
   }
 
-  async function fetchCustomers() {
+  // The backend pages and searches customers (size is capped at 100 server-side).
+  // Search-as-you-type fires overlapping requests; only the newest one may write state.
+  let customersSeq = 0
+  async function fetchCustomers(opts: { page?: number; size?: number; search?: string } = {}) {
+    const seq = ++customersSeq
     const api = useApi()
-    const res = await api<any>('/admin/customers')
-    customers.value = res.data ?? []
+    const params: Record<string, any> = { page: opts.page ?? 1, size: opts.size ?? 24 }
+    if (opts.search) params.search = opts.search
+    const res = await api<any>('/admin/customers', { params })
+    if (seq !== customersSeq) return
+    customers.value      = res.data?.customers ?? []
+    customersTotal.value = res.data?.total ?? 0
+  }
+
+  /** Null on a 404 (or any failure) so the detail page can render a clean "not found". */
+  async function fetchCustomer(id: string): Promise<Customer | null> {
+    try {
+      const api = useApi()
+      const res = await api<any>(`/admin/customers/${id}`)
+      return res.data as Customer
+    } catch {
+      return null
+    }
   }
 
   async function updateJobStatus(jobId: string, status: Job['status']) {
@@ -178,10 +198,10 @@ export const useAdminStore = defineStore('admin', () => {
 
   return {
     // state
-    jobs, stats, alerts, customers, loading, selectedJob,
+    jobs, stats, alerts, customers, customersTotal, loading, selectedJob,
     staff, settings, reportData, lastUpdated,
     // queue / stats / customers (real API)
-    fetchQueue, fetchStats, fetchCustomers,
+    fetchQueue, fetchStats, fetchCustomers, fetchCustomer,
     updateJobStatus, markAsPaid, saveNotes, cancelJob,
     selectJob, clearSelectedJob, lookupCustomer, fetchJobFileUrl,
     // polling

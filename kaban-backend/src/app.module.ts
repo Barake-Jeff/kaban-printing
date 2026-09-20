@@ -3,7 +3,9 @@ import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
 import { SequelizeModule } from '@nestjs/sequelize';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { JwtModule } from '@nestjs/jwt';
+import { ThrottlerModule } from '@nestjs/throttler';
+import { UserThrottlerGuard } from './common/guards/user-throttler.guard';
 import { AuthModule } from './modules/auth/auth.module';
 import { PushModule } from './modules/push/push.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
@@ -43,6 +45,8 @@ import { Payment } from './modules/payments/models/payment.model';
       }),
     }),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
+    // Only used by UserThrottlerGuard to verify access tokens; secret is passed per call.
+    JwtModule.register({}),
     ScheduleModule.forRoot(),
     AuthModule,
     PushModule,
@@ -54,7 +58,7 @@ import { Payment } from './modules/payments/models/payment.model';
     AdminModule,
   ],
   providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_GUARD, useClass: UserThrottlerGuard },
   ],
 })
 export class AppModule {}

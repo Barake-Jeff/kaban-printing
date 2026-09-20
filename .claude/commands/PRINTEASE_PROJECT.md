@@ -193,8 +193,9 @@ DELETE /api/push/unsubscribe       → authenticated
 ```
 GET    /api/admin/jobs             → full queue with customer info + pagination
 GET    /api/admin/stats            → { jobsToday, pending, completed, revenueToday }
-GET    /api/admin/customers        → all customers with aggregated stats
+GET    /api/admin/customers?page=&size=&search= → paginated customers with aggregated stats { customers, total, page, size }
 GET    /api/admin/customers/lookup?house=14B → single customer by house number
+GET    /api/admin/customers/:id    → single customer by id (uuid)
 PATCH  /api/admin/jobs/:id/status  → { status: 'printing' | 'ready' | 'delivered' }
 PATCH  /api/admin/jobs/:id/payment → mark pay-on-pickup as paid
 PATCH  /api/admin/jobs/:id/notes   → { notes: string }

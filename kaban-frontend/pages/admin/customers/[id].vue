@@ -145,7 +145,6 @@
 
 <script setup lang="ts">
 import type { Customer, Job } from '~/types'
-import { CUSTOMERS } from '~/data/dummy'
 
 definePageMeta({ layout: 'admin', middleware: 'auth', requiresAuth: true, role: 'admin' })
 
@@ -200,11 +199,14 @@ async function onQuickAdvance(job: Job) {
 onMounted(async () => {
   loading.value = true
   try {
-    if (admin.customers.length === 0) await admin.fetchCustomers()
-    if (admin.jobs.length === 0) await admin.fetchQueue()
-    customer.value = admin.customers.find(c => c.id === customerId.value)
-      ?? (CUSTOMERS as unknown as Customer[]).find(c => c.id === customerId.value)
-      ?? null
+    // The list is paginated server-side, so fetch this one customer directly instead of
+    // hoping it happens to be in a loaded page.
+    const [found] = await Promise.all([
+      admin.fetchCustomer(customerId.value),
+      // Order history is a bonus; the profile should still show if the queue fails to load.
+      admin.jobs.length === 0 ? admin.fetchQueue().catch(() => {}) : Promise.resolve(),
+    ])
+    customer.value = found
   } finally {
     loading.value = false
   }

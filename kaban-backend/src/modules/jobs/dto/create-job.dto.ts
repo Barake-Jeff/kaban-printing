@@ -1,7 +1,8 @@
 import {
-  IsString, IsOptional, IsEnum, IsInt, IsPositive, Min, IsUUID, MaxLength,
+  IsString, IsOptional, IsEnum, IsInt, IsPositive, Min, Max, IsUUID, MaxLength,
 } from 'class-validator';
 import { ColorMode, SideMode, DeliveryType, PaymentMethod } from '../models/job.model';
+import { MAX_COPIES, MAX_INSTRUCTIONS_LENGTH } from '../../../common/constants/limits';
 
 export class CreateJobDto {
   @IsOptional()
@@ -15,6 +16,7 @@ export class CreateJobDto {
 
   @IsOptional()
   @IsString()
+  @MaxLength(MAX_INSTRUCTIONS_LENGTH)
   instructions?: string;
 
   @IsInt()
@@ -23,6 +25,7 @@ export class CreateJobDto {
 
   @IsInt()
   @Min(1)
+  @Max(MAX_COPIES)
   copies: number;
 
   @IsOptional()

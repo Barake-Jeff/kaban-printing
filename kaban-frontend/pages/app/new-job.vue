@@ -82,6 +82,7 @@
           <label class="font-label-bold text-label-bold text-on-surface-variant">Special Instructions</label>
           <textarea
             v-model="form.instructions"
+            :maxlength="MAX_INSTRUCTIONS_LENGTH"
             class="w-full h-32 p-md bg-surface-container-lowest border border-outline-variant focus:ring-2 focus:ring-secondary focus:border-secondary outline-none transition-all font-body-lg text-body-lg placeholder:text-on-surface-variant/50 rounded-xl resize-none"
             placeholder="Type your print instructions here..."
           />
@@ -130,9 +131,9 @@
               >
                 <span class="material-symbols-outlined">remove</span>
               </button>
-              <span class="font-bold text-body-lg w-6 text-center">{{ form.copies }}</span>
+              <span class="font-bold text-body-lg min-w-6 text-center">{{ form.copies }}</span>
               <button
-                @click="form.copies++"
+                @click="form.copies = Math.min(MAX_COPIES, form.copies + 1)"
                 class="w-10 h-10 flex items-center justify-center text-primary active:scale-90 transition-transform"
               >
                 <span class="material-symbols-outlined">add</span>
@@ -493,6 +494,9 @@ const previewLoading = ref(false)
 const detectedTotalPages = ref(1)
 const pageSelectionError = ref('')
 const MAX_MANUAL_PAGES = 100
+// Mirror the backend's CreateJobDto limits (common/constants/limits.ts).
+const MAX_COPIES = 1000
+const MAX_INSTRUCTIONS_LENGTH = 2000
 
 // Pricing is admin-configured (see GET /jobs/pricing) — fetch once up front so
 // it's ready well before the user reaches the cost estimate on step 2.

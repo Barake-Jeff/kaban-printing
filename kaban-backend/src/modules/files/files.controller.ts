@@ -4,7 +4,9 @@ import {
   MaxFileSizeValidator, FileTypeValidator,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import { memoryStorage } from 'multer';
+import { MAX_UPLOAD_BYTES } from '../../common/constants/limits';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OwnershipGuard } from '../../common/guards/ownership.guard';
 import { CheckOwnership } from '../../common/decorators/check-ownership.decorator';
@@ -19,12 +21,19 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @UseInterceptors(FileInterceptor('file', {
+    storage: memoryStorage(),
+    // Enforced while the stream is read, so an oversized upload is aborted (413) instead of
+    // being buffered in full before ParseFilePipe gets a chance to reject it. The other
+    // limits bound what a multipart body can carry besides the one file.
+    limits: { fileSize: MAX_UPLOAD_BYTES, files: 1, fields: 2, parts: 3, fieldSize: 1024 },
+  }))
   uploadFile(
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 20 * 1024 * 1024 }),
+          new MaxFileSizeValidator({ maxSize: MAX_UPLOAD_BYTES }),
           new FileTypeValidator({ fileType: /(pdf|msword|officedocument\.wordprocessingml|jpeg|jpg|png)/i }),
         ],
       }),

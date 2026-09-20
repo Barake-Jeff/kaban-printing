@@ -1,7 +1,8 @@
 import {
-  Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Patch, Delete, Body, Param, ParseUUIDPipe, Query, UseGuards,
 } from '@nestjs/common';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { parsePagination } from '../../common/utils/pagination.util';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -24,10 +25,11 @@ export class AdminController {
   @Get('jobs')
   getQueue(
     @Query('status') status?: string,
-    @Query('page')   page = '1',
-    @Query('size')   size = '50',
+    @Query('page')   page?: string,
+    @Query('size')   size?: string,
   ) {
-    return this.adminService.getQueue(status, Number(page), Number(size));
+    const p = parsePagination(page, size, { defaultSize: 50 });
+    return this.adminService.getQueue(status, p.page, p.size);
   }
 
   @Get('stats')
@@ -38,13 +40,23 @@ export class AdminController {
   // ── Customers ──────────────────────────────────────────────────────────────
 
   @Get('customers')
-  getCustomers() {
-    return this.adminService.getCustomers();
+  getCustomers(
+    @Query('page')   page?: string,
+    @Query('size')   size?: string,
+    @Query('search') search?: string,
+  ) {
+    return this.adminService.getCustomers(parsePagination(page, size, { defaultSize: 24 }), search);
   }
 
+  // Must stay ahead of 'customers/:id', or "lookup" gets matched as an id.
   @Get('customers/lookup')
   lookupCustomer(@Query('house') house: string) {
     return this.adminService.lookupCustomer(house);
+  }
+
+  @Get('customers/:id')
+  getCustomer(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.getCustomer(id);
   }
 
   // ── Job mutations ──────────────────────────────────────────────────────────

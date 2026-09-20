@@ -1,7 +1,8 @@
 import {
-  Injectable, NotFoundException, BadRequestException,
+  Injectable, NotFoundException, BadRequestException, HttpException, HttpStatus,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/sequelize';
+import { Op } from 'sequelize';
 import { Job, JobStatus, PaymentStatus } from './models/job.model';
 import { File } from '../files/models/file.model';
 import { User, UserRole } from '../users/models/user.model';
@@ -10,6 +11,7 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { CreateJobDto } from './dto/create-job.dto';
 import { getPricing } from '../../common/utils/pricing.util';
 import { parsePageRange } from '../../common/utils/page-range.util';
+import { MAX_JOBS_PER_DAY, QUOTA_WINDOW_MS } from '../../common/constants/limits';
 
 const MAX_MANUAL_PAGES = 100;
 
@@ -28,6 +30,14 @@ export class JobsService {
   }
 
   async create(dto: CreateJobDto, user: User) {
+    // Concurrent requests can overshoot by at most the per-minute throttle; fine for a cost cap.
+    const recentJobs = await this.jobModel.count({
+      where: { userId: user.id, createdAt: { [Op.gte]: new Date(Date.now() - QUOTA_WINDOW_MS) } },
+    });
+    if (recentJobs >= MAX_JOBS_PER_DAY) {
+      throw new HttpException('Daily job limit reached. Please try again tomorrow.', HttpStatus.TOO_MANY_REQUESTS);
+    }
+
     if (!dto.fileId && !dto.instructions?.trim()) {
       throw new BadRequestException('Either a file or instructions must be provided');
     }

@@ -1,4 +1,5 @@
 import { Controller, Get, Patch, Post, Body, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UsersService } from './users.service';
@@ -28,6 +29,7 @@ export class UsersController {
   }
 
   @Post('me/change-password')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   changePassword(@CurrentUser() user: User, @Body() dto: ChangePasswordDto) {
     return this.usersService.changePassword(user.id, dto);
   }

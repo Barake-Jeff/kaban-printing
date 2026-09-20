@@ -1,12 +1,12 @@
-import { IsString, IsNotEmpty } from 'class-validator';
+import { IsString, IsNotEmpty, MaxLength } from 'class-validator';
 
 export class SubscribeDto {
-  @IsString() @IsNotEmpty()
+  @IsString() @IsNotEmpty() @MaxLength(2048)
   endpoint: string;
 
-  @IsString() @IsNotEmpty()
+  @IsString() @IsNotEmpty() @MaxLength(255)
   p256dh: string;
 
-  @IsString() @IsNotEmpty()
+  @IsString() @IsNotEmpty() @MaxLength(255)
   auth: string;
 }

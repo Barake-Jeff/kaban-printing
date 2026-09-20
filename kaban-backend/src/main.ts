@@ -15,6 +15,15 @@ async function bootstrap() {
   // browser can revalidate against a stale cached body (304) and never see new data.
   app.set('etag', false);
 
+  // Rate limiting keys anonymous callers by req.ip. Behind a reverse proxy that is the
+  // proxy's address unless Express is told how many hops to trust. Unset = trust nothing.
+  // Use a hop count ("1") or specific addresses ("loopback", CIDRs) — never "true", which
+  // believes any client-supplied X-Forwarded-For and lets callers choose their own bucket.
+  const trustProxy = config.get<string>('TRUST_PROXY')?.trim();
+  if (trustProxy) {
+    app.set('trust proxy', /^\d+$/.test(trustProxy) ? Number(trustProxy) : trustProxy);
+  }
+
   app.setGlobalPrefix('api');
 
   app.useGlobalPipes(new ValidationPipe({

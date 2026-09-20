@@ -1,4 +1,5 @@
 import { Controller, Post, Get, Param, Body, UseGuards } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OwnershipGuard } from '../../common/guards/ownership.guard';
 import { CheckOwnership } from '../../common/decorators/check-ownership.decorator';
@@ -12,7 +13,9 @@ import { User, UserRole } from '../users/models/user.model';
 export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
+  // Each call pops an STK prompt on a phone, so keep it tight.
   @Post('mpesa/initiate')
+  @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @UseGuards(JwtAuthGuard)
   initiateStk(@Body() dto: InitiateMpesaDto, @CurrentUser() user: User) {
     return this.paymentsService.initiateStk(dto, user.id);
