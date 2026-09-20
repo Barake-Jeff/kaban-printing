@@ -181,11 +181,15 @@ export const useAdminStore = defineStore('admin', () => {
     reportData.value = await fetch()
   }
 
-  async function fetchJobFileUrl(jobId: string): Promise<string | null> {
+  /**
+   * `url` is what staff should print: the customer's original for Word documents, the single
+   * file otherwise. `pdfUrl` is the converted PDF the customer previewed, Word documents only.
+   */
+  async function fetchJobFiles(jobId: string): Promise<{ url: string; pdfUrl: string | null; fileName: string } | null> {
     try {
       const api = useApi()
       const res = await api<any>(`/admin/jobs/${jobId}/file`)
-      return res.data.url as string
+      return { url: res.data.url, pdfUrl: res.data.pdfUrl ?? null, fileName: res.data.fileName }
     } catch {
       return null
     }
@@ -203,7 +207,7 @@ export const useAdminStore = defineStore('admin', () => {
     // queue / stats / customers (real API)
     fetchQueue, fetchStats, fetchCustomers, fetchCustomer,
     updateJobStatus, markAsPaid, saveNotes, cancelJob,
-    selectJob, clearSelectedJob, lookupCustomer, fetchJobFileUrl,
+    selectJob, clearSelectedJob, lookupCustomer, fetchJobFiles,
     // polling
     startPolling, stopPolling,
     // staff (composable-backed)

@@ -189,8 +189,10 @@ export class AdminService {
     const job = await this.jobModel.findOne({ where: { id: jobId } });
     if (!job) throw new NotFoundException('Job not found');
     if (!job.fileId) throw new NotFoundException('No file attached to this job');
-    const url = await this.filesService.getPresignedUrlForAdmin(job.fileId);
-    return { url, fileName: job.fileName ?? 'document' };
+    // `url` is what staff should print (the original for Word documents); `pdfUrl` is the
+    // converted PDF the customer previewed, only present for Word documents.
+    const { url, pdfUrl } = await this.filesService.getAdminDownloadUrls(job.fileId);
+    return { url, pdfUrl, fileName: job.fileName ?? 'document' };
   }
 
   // ── Customers ──────────────────────────────────────────────────────────────

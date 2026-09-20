@@ -18,7 +18,7 @@
           <button
             @click="$emit('update:modelValue', false)"
             class="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-xl transition-colors"
-          >Cancel</button>
+          >{{ cancelLabel ?? 'Cancel' }}</button>
           <button
             @click="() => { $emit('confirm'); $emit('update:modelValue', false) }"
             :class="[
@@ -38,6 +38,7 @@ defineProps<{
   title: string
   description?: string
   confirmLabel?: string
+  cancelLabel?: string
   danger?: boolean
 }>()
 

@@ -19,15 +19,26 @@
         <div>
           <p class="text-xs text-gray-400 font-mono">{{ job.id.slice(0, 8) }}…</p>
           <h2 class="font-bold text-gray-900 mt-0.5">{{ job.fileName ?? 'Walk-in job' }}</h2>
-          <button
-            v-if="job.fileName"
-            @click="downloadFile"
-            :disabled="downloading"
-            class="mt-1 flex items-center gap-1 text-xs text-primary hover:text-primary/70 font-medium transition-colors disabled:opacity-50"
-          >
-            <span class="material-symbols-outlined" style="font-size:16px;">download</span>
-            {{ downloading ? 'Getting link…' : 'Download file' }}
-          </button>
+          <div v-if="job.fileName" class="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1">
+            <button
+              @click="downloadFile('original')"
+              :disabled="downloading"
+              class="flex items-center gap-1 text-xs text-primary hover:text-primary/70 font-medium transition-colors disabled:opacity-50"
+            >
+              <span class="material-symbols-outlined" style="font-size:16px;">download</span>
+              {{ downloading ? 'Getting link…' : isWordJob ? `Download original (.${job.fileType})` : 'Download file' }}
+            </button>
+            <!-- Word jobs: the PDF is what the customer previewed and was quoted from -->
+            <button
+              v-if="isWordJob"
+              @click="downloadFile('pdf')"
+              :disabled="downloading"
+              class="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 font-medium transition-colors disabled:opacity-50"
+            >
+              <span class="material-symbols-outlined" style="font-size:16px;">picture_as_pdf</span>
+              Download PDF preview
+            </button>
+          </div>
         </div>
         <button @click="$emit('close')" class="p-2 hover:bg-gray-100 rounded-full transition-colors">
           <span class="material-symbols-outlined text-gray-500">close</span>
@@ -74,6 +85,9 @@
             class="mt-2 bg-amber-50 border border-amber-200 rounded-xl p-3 text-sm text-amber-800"
           >
             <span class="font-semibold">Print only pages:</span> {{ job.pageSelection }}
+            <p v-if="isWordJob" class="mt-1 text-xs text-amber-700">
+              These pages were chosen from the PDF preview. Word's page breaks may differ, so use the PDF preview to match them.
+            </p>
           </div>
         </section>
 
@@ -162,11 +176,16 @@ const props = defineProps<{ job: Job | null }>()
 const admin = useAdminStore()
 const downloading = ref(false)
 
-async function downloadFile() {
+// Word jobs keep two files: the customer's original (what staff print) and the converted PDF
+// (what the customer previewed and was quoted from).
+const isWordJob = computed(() => ['doc', 'docx'].includes(props.job?.fileType ?? ''))
+
+async function downloadFile(kind: 'original' | 'pdf' = 'original') {
   if (!props.job?.id) return
   downloading.value = true
-  const url = await admin.fetchJobFileUrl(props.job.id)
+  const files = await admin.fetchJobFiles(props.job.id)
   downloading.value = false
+  const url = kind === 'pdf' ? files?.pdfUrl : files?.url
   if (url) window.open(url, '_blank')
   else toast.error('Could not get download link')
 }

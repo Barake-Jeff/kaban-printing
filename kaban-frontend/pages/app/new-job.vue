@@ -45,7 +45,8 @@
         <!-- Upload area -->
         <div
           class="dashed-border bg-surface-container-low p-xl flex flex-col items-center justify-center gap-md cursor-pointer hover:bg-surface-container transition-colors active:scale-[0.98] rounded-xl"
-          :class="{ 'bg-secondary-fixed': selectedFile }"
+          :class="{ 'bg-secondary-fixed': selectedFile, 'pointer-events-none opacity-60': uploadLoading }"
+          :aria-disabled="uploadLoading"
           @click="triggerFileInput"
         >
           <div class="w-16 h-16 rounded-full bg-primary-container/10 flex items-center justify-center">
@@ -68,6 +69,32 @@
             accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
             @change="handleFileChange"
           />
+        </div>
+
+        <p v-if="uploadError" role="alert" class="text-error font-body-sm text-body-sm">{{ uploadError }}</p>
+
+        <!-- Upload / conversion progress. One message covers "waiting in the queue" and "converting":
+             the browser can't tell which, and both mean the same thing to the user. -->
+        <div
+          v-if="uploadLoading"
+          role="status"
+          aria-live="polite"
+          class="flex items-start gap-md bg-surface-container-low p-md rounded-xl"
+        >
+          <span
+            class="material-symbols-outlined text-secondary-container text-[28px] animate-spin motion-reduce:animate-none flex-shrink-0"
+            aria-hidden="true"
+          >progress_activity</span>
+          <div>
+            <p class="font-label-bold text-label-bold text-on-surface">
+              {{ uploadingWord ? 'Converting to PDF…' : 'Uploading your file…' }}
+            </p>
+            <p class="font-body-sm text-body-sm text-on-surface-variant">
+              {{ uploadingWord
+                ? 'If other documents are ahead of yours this can take a little longer. Please keep this page open.'
+                : 'Please keep this page open.' }}
+            </p>
+          </div>
         </div>
 
         <!-- OR divider -->
@@ -459,17 +486,33 @@
       <button
         @click="handleNext"
         :disabled="jobs.loading || uploadLoading"
-        class="w-full h-12 text-on-primary font-label-bold text-label-bold rounded-lg uppercase tracking-wider active:scale-[0.98] transition-all disabled:opacity-60"
+        class="w-full h-12 text-on-primary font-label-bold text-label-bold rounded-lg uppercase tracking-wider active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed"
         style="background-color: #F97316;"
       >
-        {{ uploadLoading ? 'Uploading…' : 'Next' }}
+        <span v-if="uploadLoading" class="inline-flex items-center justify-center gap-sm">
+          <span class="material-symbols-outlined text-[20px] animate-spin motion-reduce:animate-none" aria-hidden="true">progress_activity</span>
+          {{ uploadingWord ? 'Converting to PDF…' : 'Uploading…' }}
+        </span>
+        <template v-else>Next</template>
       </button>
     </div>
+
+    <!-- Shown when the user tries to leave (arrow, back button, nav links) mid-upload -->
+    <AdminConfirmDialog
+      v-model="leaveDialogOpen"
+      :title="uploadingWord ? 'Cancel the conversion?' : 'Cancel the upload?'"
+      :description="leaveDescription"
+      confirm-label="Leave and cancel"
+      cancel-label="Stay on page"
+      danger
+      @confirm="onLeaveConfirmed"
+    />
 
   </div>
 </template>
 
 <script setup lang="ts">
+import { useEventListener } from '@vueuse/core'
 import type { SubmitJobPayload, ColorMode, SideMode } from '~/types'
 
 definePageMeta({
@@ -482,7 +525,8 @@ const router         = useRouter()
 const jobs           = useJobsStore()
 const step           = ref(0)
 const stepError      = ref('')
-const fileInputRef   = ref<HTMLInputElement | null>(null)
+const uploadError    = ref('') // file problems, shown right under the upload area
+const fileInputRef  = ref<HTMLInputElement | null>(null)
 const selectedFile   = ref<File | null>(null)
 const fileId         = ref<string | null>(null)
 const uploadLoading  = ref(false)
@@ -497,6 +541,9 @@ const MAX_MANUAL_PAGES = 100
 // Mirror the backend's CreateJobDto limits (common/constants/limits.ts).
 const MAX_COPIES = 1000
 const MAX_INSTRUCTIONS_LENGTH = 2000
+const MAX_UPLOAD_MB = 20
+const UPLOAD_EXTENSIONS = ['pdf', 'doc', 'docx', 'jpg', 'jpeg', 'png']
+const UNSUPPORTED_FILE_MESSAGE = "We can't accept that file. Please upload a PDF, a Word document (.doc or .docx), or a JPEG or PNG image."
 
 // Pricing is admin-configured (see GET /jobs/pricing) — fetch once up front so
 // it's ready well before the user reaches the cost estimate on step 2.
@@ -527,6 +574,63 @@ const sideOpts: Array<{ val: SideMode; label: string }> = [
 
 const isWordDoc = computed(() => /\.docx?$/i.test(form.fileName ?? ''))
 
+// ── Upload progress and cancel-on-leave ─────────────────────────────────────
+// Word files are converted to PDF on the server, possibly after waiting behind other
+// conversions; everything else is just a plain upload.
+const uploadingWord = computed(() => uploadLoading.value && /\.docx?$/i.test(selectedFile.value?.name ?? ''))
+
+// Aborting the in-flight request is enough to cancel server-side work: the backend notices the
+// client went away, drops a queued conversion or kills a running one, and stores nothing.
+let uploadAbort: AbortController | null = null
+
+const leaveDialogOpen = ref(false)
+let settleLeave: ((allow: boolean) => void) | null = null
+
+const leaveDescription = computed(() =>
+  uploadingWord.value
+    ? 'Your file is still being converted. If you leave this page now the conversion will be cancelled and you\'ll need to upload it again.'
+    : 'Your file is still uploading. If you leave this page now the upload will be cancelled and you\'ll need to upload it again.',
+)
+
+function resolveLeave(allow: boolean) {
+  const resolve = settleLeave
+  settleLeave = null
+  resolve?.(allow)
+}
+
+function onLeaveConfirmed() {
+  uploadAbort?.abort()
+  resolveLeave(true)
+}
+
+// Covers every in-app way out: the top-left arrow, the browser/phone back button and the
+// bottom-nav links. Only interferes while a file is actually uploading.
+onBeforeRouteLeave(() => {
+  if (!uploadLoading.value) return true
+  if (leaveDialogOpen.value) return false   // already asking; ignore repeat taps
+  leaveDialogOpen.value = true
+  return new Promise<boolean>(resolve => { settleLeave = resolve })
+})
+
+// Dismissing the dialog (Stay on page / backdrop) means stay. The confirm handler resolves
+// first, so this is a no-op after "Leave and cancel".
+watch(leaveDialogOpen, open => { if (!open) resolveLeave(false) })
+// If the upload finishes while the dialog is open there is nothing left to cancel: close it and stay.
+watch(uploadLoading, loading => { if (!loading) leaveDialogOpen.value = false })
+
+// Closing the tab or refreshing mid-upload: the browser's own generic warning (its text can't
+// be customised, and some mobile browsers skip it). If the tab closes anyway the connection
+// drops and the server cancels on its own. Deliberately no listeners for minimise, tab
+// switch or going offline: a blip shouldn't destroy an upload.
+useEventListener('beforeunload', (e: BeforeUnloadEvent) => {
+  if (!uploadLoading.value) return
+  e.preventDefault()
+  e.returnValue = ''
+})
+
+// Navigations that bypass the guard still shouldn't leave work running for a page that's gone.
+onBeforeUnmount(() => { uploadAbort?.abort() })
+
 // Server-sourced (jobs.pricing) — never hardcode these, the admin can change
 // them at any time via /admin/settings and this must track that live.
 const costEstimate = computed(() => {
@@ -541,11 +645,32 @@ const costEstimate = computed(() => {
   return { printCost, deliveryFee, total: printCost + deliveryFee }
 })
 
-function triggerFileInput() { fileInputRef.value?.click() }
+function triggerFileInput() {
+  if (uploadLoading.value) return
+  fileInputRef.value?.click()
+}
 
 function handleFileChange(e: Event) {
-  const file = (e.target as HTMLInputElement).files?.[0]
+  // Picking another file mid-upload would reset fileId under the in-flight request.
+  if (uploadLoading.value) return
+  const input = e.target as HTMLInputElement
+  const file = input.files?.[0]
   if (!file) return
+  uploadError.value = ''
+
+  // A quick check by size and extension so the two most common mistakes are answered
+  // instantly, without uploading anything. The server re-checks from the file's real contents.
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? ''
+  const problem =
+    file.size > MAX_UPLOAD_MB * 1024 * 1024 ? `That file is too large. The maximum size is ${MAX_UPLOAD_MB} MB.`
+    : file.size === 0 || !UPLOAD_EXTENSIONS.includes(ext) ? UNSUPPORTED_FILE_MESSAGE
+    : null
+  if (problem) {
+    uploadError.value = problem
+    input.value = '' // so choosing the same file again still fires @change
+    return
+  }
+
   selectedFile.value = file
   fileId.value = null // reset so it gets uploaded on next
   fileMimeType.value = null
@@ -599,6 +724,7 @@ function handleBack() {
 
 async function handleNext() {
   stepError.value = ''
+  uploadError.value = ''
 
   if (step.value === 0) {
     if (!selectedFile.value && !form.instructions.trim()) {
@@ -619,22 +745,28 @@ async function handleNext() {
     // Upload file to backend if one is selected and not yet uploaded
     if (selectedFile.value && !fileId.value) {
       uploadLoading.value = true
+      const controller = new AbortController()
+      uploadAbort = controller
       try {
         const api      = useApi()
         const formData = new FormData()
         formData.append('file', selectedFile.value)
-        const res = await api<any>('/files/upload', { method: 'POST', body: formData })
+        const res = await api<any>('/files/upload', { method: 'POST', body: formData, signal: controller.signal })
         fileId.value           = res.data.fileId
         form.fileName          = res.data.fileName
         detectedTotalPages.value = res.data.pageCount
         recomputeEffectivePages()
         fileMimeType.value     = res.data.mimeType
       } catch (e: any) {
-        stepError.value = e?.data?.message ?? 'File upload failed. Please try again.'
-        uploadLoading.value = false
+        // A deliberate cancel (the user chose to leave) isn't an error worth reporting.
+        if (!controller.signal.aborted) {
+          uploadError.value = e?.data?.message ?? 'File upload failed. Please try again.'
+        }
         return
+      } finally {
+        uploadLoading.value = false
+        uploadAbort = null
       }
-      uploadLoading.value = false
 
       // Best-effort: a broken preview shouldn't block a successful upload.
       previewLoading.value = true

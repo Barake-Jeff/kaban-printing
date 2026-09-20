@@ -213,14 +213,49 @@ change-password: 5/min.
 }
 ```
 
+**Cancelling:** aborting the upload request (an `AbortController` signal, closing the tab, a dropped
+connection) cancels the server-side work: a conversion still waiting in the queue is dropped, a running
+LibreOffice is killed, and nothing is stored (no `files` row, no MinIO objects, and it doesn't count toward
+the daily upload cap). The server logs it as `499 Upload cancelled`; the client never sees that status. There
+is no status endpoint: a Word upload is one long request, so the UI shows a single "Converting to PDF…" state
+covering both queueing and converting.
+
+**Accepted files:** PDF, Word (`.doc` and `.docx`), JPEG, PNG, up to 20 MB. What a file *is* is decided
+from its bytes, never from the browser-declared MIME type or the filename: a Word file labelled `image/png`
+is still converted and billed by its real page count, a `.xls`/`.xlsx` renamed `.doc`/`.docx` is refused, and
+the stored name and extension come from the detected type (`<uuid>.docx`), not from the customer's filename.
+The `mimeType` returned is the canonical one for the detected type.
+
+**Errors** (the `message` is written for customers; show it as-is):
+
+| Status | When | Message |
+|--------|------|---------|
+| `415` | Not a PDF / Word / JPEG / PNG (renamed spreadsheets, text files, damaged or empty files) | "We can't accept that file. Please upload a PDF, a Word document (.doc or .docx), or a JPEG or PNG image." |
+| `413` | Over 20 MB | "That file is too large. The maximum size is 20 MB." |
+| `400` | No file sent | "Please choose a file to upload." |
+| `400` | Extra form fields / wrong field name | "That upload didn't look right. Please choose the file again." |
+| `400` | PDF can't be parsed | "We couldn't read that PDF. It may be damaged or password-protected. Please try another copy." |
+| `500` | LibreOffice can't convert a Word file | "We couldn't convert that document to PDF. Check that it opens normally, or save it as a PDF and upload that instead." |
+
+The old `400` "Validation failed (current file type is …)" no longer exists. The new-job page also pre-checks
+size and extension in the browser and shows the same wording without uploading.
+
 ### GET /api/admin/jobs/:id/file
 
 ```typescript
 {
-  url:      string,   // presigned download URL (1h expiry) — MinIO prefers pdf_key, falls back to file_key
-  fileName: string,
+  url:      string,          // what staff should PRINT (1h expiry): the customer's original for Word
+                             //   documents (.doc/.docx, served as an attachment named after their file);
+                             //   for PDFs and images, the file itself, as before
+  pdfUrl:   string | null,   // Word documents only: the converted PDF the customer previewed and was
+                             //   quoted from (attachment named <original>.pdf). null for everything else
+  fileName: string,          // the customer's original filename
 }
 ```
+
+Page count, cost and the customer-side preview (`GET /files/:id`) always come from the PDF. Pages a customer
+picked with "specific pages" refer to the PDF's page breaks, which Word may lay out differently, so the admin
+panel shows a note next to the selection for Word jobs.
 
 ---
 
@@ -381,7 +416,7 @@ pending request for them. Works for customers and clerks, at any time (no reques
 | `useAdminStore().saveNotes()`            | PATCH /api/admin/jobs/:id/notes                |
 | `useAdminStore().cancelJob(id)`          | DELETE /api/admin/jobs/:id                     |
 | `useAdminStore().lookupCustomer()`       | GET /api/admin/customers/lookup?house={house}  |
-| `useAdminStore().fetchJobFileUrl(id)`    | GET /api/admin/jobs/:id/file                   |
+| `useAdminStore().fetchJobFiles(id)`      | GET /api/admin/jobs/:id/file                   |
 | `useAdminStaff().fetchStaff()`          | GET /api/admin/staff                           |
 | `useAdminStaff().createStaff(dto)`      | POST /api/admin/staff                          |
 | `useAdminStaff().deactivateStaff(id)`   | PATCH /api/admin/staff/:id/deactivate          |

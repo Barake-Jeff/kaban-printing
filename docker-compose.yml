@@ -43,6 +43,9 @@ services:
 
   backend:
     container_name: kaban-backend
+    # Runs a tiny init as PID 1 so the orphaned LibreOffice worker left behind when a
+    # conversion is cancelled or times out is reaped instead of lingering as a zombie.
+    init: true
     build:
       context: ./kaban-backend
       dockerfile: Dockerfile
