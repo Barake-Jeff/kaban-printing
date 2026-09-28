@@ -54,7 +54,7 @@ List the exact files to create, in order:
 - Follow `NESTJS_PATTERNS.md` for all module/controller/service structure
 - Follow `DATABASE_SCHEMA.md` for entity field names and column mappings
 - Do not start the payments module — that comes next session
-- Do not write migrations — use synchronize:true in dev for now
+- Schema changes go through sequelize-cli migrations (`kaban-backend/db/migrations/`); `synchronize` is off
 - Do not add WebSockets yet
 
 ---

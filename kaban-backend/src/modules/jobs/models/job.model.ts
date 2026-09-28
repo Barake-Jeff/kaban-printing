@@ -26,7 +26,12 @@ export enum PaymentMethod { MPESA = 'mpesa', PAY_ON_PICKUP = 'pay_on_pickup' }
 
 @Table({
   tableName: 'jobs', timestamps: true, underscored: true,
-  indexes: [{ name: 'idx_user_id', fields: ['user_id'] }],
+  indexes: [
+    { name: 'idx_user_id', fields: ['user_id'] },
+    { name: 'idx_status', fields: ['status'] },
+    { name: 'idx_payment_status', fields: ['payment_status'] },
+    { name: 'idx_created_at', fields: ['created_at'] },
+  ],
 })
 export class Job extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })

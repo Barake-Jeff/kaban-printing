@@ -19,7 +19,11 @@ export enum PaymentRecordMethod {
 
 @Table({
   tableName: 'payments', timestamps: true, underscored: true,
-  indexes: [{ name: 'idx_user_id', fields: ['user_id'] }],
+  indexes: [
+    { name: 'idx_user_id', fields: ['user_id'] },
+    { name: 'idx_checkout_req_id', fields: ['checkout_req_id'] },
+    { name: 'idx_mpesa_ref', fields: ['mpesa_ref'] },
+  ],
 })
 export class Payment extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })

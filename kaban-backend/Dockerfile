@@ -34,9 +34,12 @@ RUN npm install --omit=dev && \
     chown -R node:node /app
 
 COPY --from=builder --chown=node:node /app/dist ./dist
+COPY --chown=node:node .sequelizerc ./
+COPY --chown=node:node db ./db
 
 USER node
 
 EXPOSE 3001
 
-CMD ["node", "dist/main"]
+# Apply pending migrations before booting; a failed migration keeps the app down.
+CMD ["sh", "-c", "npx sequelize-cli db:migrate && exec node dist/main"]

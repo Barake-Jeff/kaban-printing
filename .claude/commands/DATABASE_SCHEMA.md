@@ -86,6 +86,8 @@ CREATE TABLE jobs (
   instructions    TEXT         NULL,
   pages           INT          NOT NULL DEFAULT 1,
   copies          INT          NOT NULL DEFAULT 1,
+  total_pages     INT          NULL,      -- page count of the uploaded document (file jobs only)
+  page_selection  VARCHAR(500) NULL,      -- customer's "print only pages" spec, e.g. "1-5, 8"
   color_mode      ENUM('bw', 'color') NOT NULL DEFAULT 'bw',
   sides           ENUM('single', 'double') NOT NULL DEFAULT 'single',
   paper_size      VARCHAR(20)  NOT NULL DEFAULT 'A4',
@@ -93,6 +95,8 @@ CREATE TABLE jobs (
   payment_method  ENUM('mpesa', 'pay_on_pickup') NOT NULL DEFAULT 'mpesa',
   payment_status  ENUM('unpaid', 'paid', 'pay_on_pickup') NOT NULL DEFAULT 'unpaid',
   status          ENUM('pending', 'printing', 'ready', 'delivered', 'cancelled') NOT NULL DEFAULT 'pending',
+  ready_at                  DATETIME NULL, -- when the job last became 'ready' (starts the pickup-overdue clock)
+  ready_overdue_notified_at DATETIME NULL, -- when the "still waiting for pickup" reminder was sent
   cost            DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   delivery_fee    DECIMAL(10,2) NOT NULL DEFAULT 0.00,
   mpesa_ref       VARCHAR(50)  NULL,
@@ -123,6 +127,8 @@ CREATE TABLE jobs (
 | `instructions`    | `instructions`       |
 | `pages`           | `pages`              |
 | `copies`          | `copies`             |
+| `total_pages`     | `totalPages`         |
+| `page_selection`  | `pageSelection`      |
 | `color_mode`      | `colorMode`          |
 | `sides`           | `sides`              |
 | `paper_size`      | `paperSize`          |
@@ -130,6 +136,8 @@ CREATE TABLE jobs (
 | `payment_method`  | `paymentMethod`      |
 | `payment_status`  | `paymentStatus`      |
 | `status`          | `status`             |
+| `ready_at`        | `readyAt`            |
+| `ready_overdue_notified_at` | `readyOverdueNotifiedAt` |
 | `cost`            | `cost`               |
 | `delivery_fee`    | `deliveryFee`        |
 | `mpesa_ref`       | `mpesaRef`           |
@@ -138,16 +146,6 @@ CREATE TABLE jobs (
 | `cancelled_by`    | `cancelledByUserId`  |
 | `created_at`      | `createdAt`          |
 | `updated_at`      | `updatedAt`          |
-
-**Existing databases need a manual migration for soft-cancel.** Sequelize's `sync()` creates missing
-tables but never alters existing ones, so on any database that predates this change run:
-
-```sql
-ALTER TABLE jobs
-  MODIFY COLUMN status ENUM('pending','printing','ready','delivered','cancelled') NOT NULL,
-  ADD COLUMN cancelled_at DATETIME NULL,
-  ADD COLUMN cancelled_by CHAR(36) BINARY NULL;
-```
 
 Cancelling is a soft-cancel (`status = 'cancelled'`); jobs are never deleted through the API. (Deleting a
 job that has a `payments` row was always impossible anyway: `payments.job_id` is a restrictive foreign key.)
@@ -366,9 +364,6 @@ CREATE TABLE password_reset_requests (
 | `resolved_at`            | `resolvedAt`         |
 | `resolved_by_user_id`    | `resolvedByUserId`   |
 
-`synchronize: true` auto-creates this table in development. **Run the SQL above manually
-against any non-dev database** (staging/production), since `synchronize` is disabled there.
-
 ---
 
 ## Pricing logic (implemented in JobsService)
@@ -392,16 +387,43 @@ function calculateCost(pages, copies, colorMode, sides, deliveryType): number {
 
 ---
 
-## Migration strategy
+## Migrations
 
-Use Sequelize `synchronize: true` in development (auto-creates/alters tables).
-For new columns on existing tables in dev, run ALTER TABLE manually if `synchronize` doesn't pick them up (e.g. after a hot-reload without full restart):
+The schema is owned by **sequelize-cli migrations** in `kaban-backend/db/migrations/` (plain JS; config in
+`kaban-backend/db/config.js`, paths in `kaban-backend/.sequelizerc`). The app runs with `synchronize: false`
+in every environment, so a model change without a migration does **not** reach the database. Never use
+`sync()`, `sync({ alter: true })` or `sync({ force: true })`.
 
-```sql
-ALTER TABLE users ADD COLUMN active TINYINT(1) NOT NULL DEFAULT 1;
-```
+When the `CREATE TABLE` blocks above and the migrations disagree, the migrations win. For example, the real
+foreign keys are `ON DELETE RESTRICT ON UPDATE CASCADE` (except `jobs.file_id` and
+`password_reset_requests.resolved_by_user_id`, which are `SET NULL`), and `notifications_log` has no foreign keys.
 
-Never use `sync({ force: true })` in production.
+**Workflow for any schema change** (run from `kaban-backend/`):
+
+1. `npm run migration:new -- add-foo-to-jobs`: creates a timestamped file in `db/migrations/`.
+2. Write `up` and `down` with `queryInterface` (`addColumn`, `changeColumn`, `addIndex`, ...).
+3. Update the Sequelize model and the `CREATE TABLE` block above to match.
+4. `npm run db:migrate` locally, then `npm run db:migrate:undo` and `npm run db:migrate` again to check `down`.
+5. Commit the migration together with the model change.
+
+Never edit a migration that has already run anywhere; add a new one instead. `npm run db:migrate:status`
+shows what has run (tracked in the `SequelizeMeta` table).
+
+**Running it:** the backend container runs `sequelize-cli db:migrate` before `node dist/main`, so
+`docker compose up --build` applies pending migrations in dev and prod, and a failing migration keeps the app
+down. From the host, `.env`'s `DB_HOST=db` doesn't resolve, so override it:
+`DB_HOST=127.0.0.1 npm run db:migrate`.
+
+**History:**
+
+- `20260924000000-baseline`: the full schema as `sync()` had built it (including every change from the old
+  hand-run upgrade log). On a database that already has the tables it does nothing and is just recorded.
+- `20260924000100-add-missing-indexes`: `jobs.idx_status`, `idx_payment_status`, `idx_created_at`;
+  `payments.idx_checkout_req_id` (non-unique for now), `idx_mpesa_ref`; `notifications_log.idx_job_id`;
+  restores the `DEFAULT 'pending'` on `jobs.status`.
+
+The baseline assumes an existing database is already fully up to date. Before a database first adopts
+migrations, compare its `mysqldump --no-data` against a dev one and fix any difference by hand.
 
 ---
 

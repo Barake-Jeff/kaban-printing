@@ -39,7 +39,9 @@ import { Payment } from './modules/payments/models/payment.model';
         // Order matters: User before File before Job before Payment
         models:        [User, RefreshToken, PasswordResetRequest, PushSubscription, NotificationLog, File, Job, Payment, Setting],
         autoLoadModels: true,
-        synchronize:   config.get('NODE_ENV') !== 'production',
+        // Schema is owned by db/migrations (sequelize-cli). Must be explicit: autoLoadModels
+        // turns sync on by default.
+        synchronize:   false,
         logging:       config.get('NODE_ENV') !== 'production' ? console.log : false,
         define:        { underscored: true },
       }),

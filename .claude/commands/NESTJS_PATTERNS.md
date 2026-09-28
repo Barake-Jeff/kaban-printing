@@ -382,7 +382,7 @@ import { Setting } from './modules/admin/models/setting.model';
         password: config.get('DB_PASSWORD'),
         database: config.get('DB_NAME'),
         models: [User, RefreshToken, PushSubscription, NotificationLog, File, Job, Payment, Setting],
-        synchronize:   config.get('NODE_ENV') !== 'production',
+        synchronize:   false, // schema is owned by db/migrations (sequelize-cli)
         logging:       config.get('NODE_ENV') !== 'production' ? console.log : false,
       }),
     }),
@@ -509,7 +509,7 @@ Use `QueryTypes.SELECT` from `sequelize`. Avoid raw SQL everywhere except report
 ## What the agent must never do
 
 - Never use TypeORM — the project uses Sequelize
-- Never use `synchronize: true` in production (only in development)
+- Never turn on `synchronize` or call `sync()`: every schema change is a sequelize-cli migration in `kaban-backend/db/migrations/` (see `DATABASE_SCHEMA.md`)
 - Never import a service from another module without exporting it first
 - Never use `@Body()` without a typed DTO
 - Never catch exceptions silently — always rethrow or log

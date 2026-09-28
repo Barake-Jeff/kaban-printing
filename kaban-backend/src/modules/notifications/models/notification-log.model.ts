@@ -9,7 +9,10 @@ import { User } from '../../users/models/user.model';
 // MySQL since that column doesn't exist under that name.
 @Table({
   tableName: 'notifications_log', timestamps: false, underscored: true,
-  indexes: [{ name: 'idx_user_id', fields: ['user_id'] }],
+  indexes: [
+    { name: 'idx_user_id', fields: ['user_id'] },
+    { name: 'idx_job_id', fields: ['job_id'] },
+  ],
 })
 export class NotificationLog extends Model {
   @Column({ type: DataType.UUID, defaultValue: DataType.UUIDV4, primaryKey: true })
