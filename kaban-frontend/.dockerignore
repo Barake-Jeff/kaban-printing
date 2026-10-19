@@ -1,0 +1,12 @@
+# Keep secrets, host-built dependencies and build output out of the Docker build context.
+# Runtime config comes from NUXT_PUBLIC_* environment variables (see docker-compose.yml),
+# so the build doesn't need .env.
+node_modules
+.nuxt
+.output
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+*.log

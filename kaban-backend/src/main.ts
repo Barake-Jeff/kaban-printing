@@ -2,6 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
@@ -9,6 +10,10 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const config = app.get(ConfigService);
+
+  // Baseline security headers (nosniff, HSTS, frame-ancestors, no X-Powered-By, ...).
+  // Defaults suit a JSON-only API: files reach browsers via MinIO presigned URLs, not here.
+  app.use(helmet());
 
   // Every route here returns personalized, frequently-changing data behind auth.
   // Express's default auto-ETag doesn't vary by Authorization header, so the

@@ -296,6 +296,13 @@ A job with `paymentStatus: 'pay_on_pickup'` enters the queue immediately.
 
 See `kaban-backend/.env.example` and `kaban-frontend/.env.example` for full lists.
 
+The backend validates its required variables at startup (`src/config/env.validation.ts`, wired into `ConfigModule.forRoot({ validate })`). A missing or invalid one stops the boot with an error naming the variable (never its value):
+
+- **JWT secrets:** at least 32 characters each, and the two must differ.
+- **Production only:** a DB password is required and MinIO's `minioadmin` credentials are rejected.
+
+When adding a required variable, add it to `EnvironmentVariables` there and to `.env.example`.
+
 **Backend key vars:**
 ```env
 NODE_ENV=development

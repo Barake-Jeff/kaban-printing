@@ -2,7 +2,7 @@
 kaban-frontend/node_modules/
 kaban-frontend/.nuxt/
 kaban-frontend/.output/
-kaban-frontend/.env/
+kaban-frontend/.env
 
 # Backend
 kaban-backend/node_modules/
@@ -18,3 +18,4 @@ kaban-backend/fonts/msfonts/*
 .nuxt/
 node_modules/
 docs/
+*.tsbuildinfo

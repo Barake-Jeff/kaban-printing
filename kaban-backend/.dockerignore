@@ -1,0 +1,14 @@
+# Keep secrets, host-built dependencies and build output out of the Docker build context.
+# The builder stage runs `COPY . .`, so anything not listed here ends up in the image layers.
+node_modules
+dist
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+uploads
+.uploads
+*.tsbuildinfo
+*.log
+# fonts/ is NOT ignored: the Dockerfile copies fonts/msfonts into the runtime image.
