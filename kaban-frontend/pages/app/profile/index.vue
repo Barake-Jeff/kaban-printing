@@ -199,6 +199,9 @@ async function onPushToggle() {
     if (!result.success && result.reason === 'denied') {
       pushToast.value = 'To enable notifications, allow them in your browser settings.'
       setTimeout(() => { pushToast.value = '' }, 4000)
+    } else if (!result.success && result.reason === 'rejected') {
+      pushToast.value = "Notifications aren't available in this browser — we'll keep using SMS."
+      setTimeout(() => { pushToast.value = '' }, 4000)
     }
   }
 }

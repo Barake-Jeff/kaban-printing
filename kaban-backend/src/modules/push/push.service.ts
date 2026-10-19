@@ -3,6 +3,9 @@ import { InjectModel } from '@nestjs/sequelize';
 import { ConfigService } from '@nestjs/config';
 import * as webpush from 'web-push';
 import { PushSubscription } from './models/push-subscription.model';
+import { isAllowedPushEndpoint } from './push-endpoint.util';
+
+const PUSH_TIMEOUT_MS = 10_000;
 
 export interface PushPayload {
   title: string;
@@ -48,14 +51,26 @@ export class PushService {
     return count > 0;
   }
 
-  async sendPush(userId: string, payload: PushPayload): Promise<void> {
+  /** Resolves true if at least one of the user's subscriptions accepted the message. */
+  async sendPush(userId: string, payload: PushPayload): Promise<boolean> {
     const subs = await this.getSubscriptions(userId);
+    let delivered = false;
     for (const sub of subs) {
+      // Rows saved before endpoints were validated could point anywhere; never send to them.
+      if (!isAllowedPushEndpoint(sub.endpoint)) {
+        await sub.destroy();
+        this.logger.warn(`Removed push subscription with a non-push-service endpoint for user ${userId}`);
+        continue;
+      }
       try {
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
           JSON.stringify(payload),
+          // Sends are awaited inside staff actions (status changes); a stalled push
+          // service must not hold those requests open.
+          { timeout: PUSH_TIMEOUT_MS },
         );
+        delivered = true;
       } catch (err: any) {
         if (err.statusCode === 410) {
           await sub.destroy();
@@ -65,5 +80,6 @@ export class PushService {
         }
       }
     }
+    return delivered;
   }
 }

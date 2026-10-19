@@ -146,6 +146,8 @@ DELETE /api/push/unsubscribe → authenticated (JwtAuthGuard)
 
 `subscribe` destroys all existing subscriptions for the user and creates a fresh one (one subscription per user).
 
+**Endpoint allowlist (OWASP API7).** The server POSTs to `endpoint` on every push, so it must be a known browser push service: `isAllowedPushEndpoint()` in `push/push-endpoint.util.ts` (FCM, Mozilla, Apple, `*.notify.windows.com`, https on the default port, canonical form only). Anything else gets 400 "Unsupported push service". `sendPush()` checks again before sending and deletes stored rows that fail. Sends have a 10 s timeout, and `sendPush()` returns whether any subscription accepted the message, so the notification log records `sent` or `failed` accurately. To support a browser on another push service, add its host there.
+
 ---
 
 ## VAPID setup
@@ -217,7 +219,7 @@ const { isSupported, isGranted, requestAndSubscribe, unsubscribe } = usePushNoti
 
 **Auto-prompt after login/signup:** `stores/auth.ts` calls `schedulePushPrompt()` after successful login or signup. It fires `requestAndSubscribe()` after a 2-second delay if permission is still `'default'`.
 
-**Profile page toggle:** `pages/app/profile/index.vue` shows a "Push notifications" toggle above SMS. Toggling on calls `requestAndSubscribe()`. Toggling off calls `unsubscribe()`. If permission is `'denied'`, the toggle is disabled with a help text.
+**Profile page toggle:** `pages/app/profile/index.vue` shows a "Push notifications" toggle above SMS. Toggling on calls `requestAndSubscribe()`. Toggling off calls `unsubscribe()`. If permission is `'denied'`, the toggle is disabled with a help text. If the backend refuses the subscription, `requestAndSubscribe()` drops the browser-side subscription and returns `reason: 'rejected'`, and the page shows a toast saying SMS will be used.
 
 **Service worker push handler:** `public/sw-push.js` — loaded via `workbox.importScripts` in `nuxt.config.ts`. Handles `push` and `notificationclick` events.
 

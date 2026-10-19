@@ -57,8 +57,8 @@ export class NotificationsService {
 
     if (hasPush) {
       const payload = this.buildPushPayload(trigger, jobId);
-      await this.pushService.sendPush(userId, payload);
-      await this.log(jobId, userId, 'push', trigger, null, payload.body, 'sent');
+      const delivered = await this.pushService.sendPush(userId, payload);
+      await this.log(jobId, userId, 'push', trigger, null, payload.body, delivered ? 'sent' : 'failed');
       return;
     }
 
@@ -75,8 +75,8 @@ export class NotificationsService {
     }
   }
 
-  async sendPush(userId: string, payload: PushPayload): Promise<void> {
-    await this.pushService.sendPush(userId, payload);
+  async sendPush(userId: string, payload: PushPayload): Promise<boolean> {
+    return this.pushService.sendPush(userId, payload);
   }
 
   private buildPushPayload(trigger: NotificationTrigger, jobId: string): PushPayload {

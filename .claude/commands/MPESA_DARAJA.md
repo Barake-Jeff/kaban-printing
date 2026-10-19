@@ -61,6 +61,8 @@ const baseUrl = this.config.get('MPESA_ENVIRONMENT') === 'production'
   : 'https://sandbox.safaricom.co.ke';
 ```
 
+The Daraja host comes **only** from `MPESA_ENVIRONMENT` (OWASP API7, SSRF). Never build any part of an outbound URL (host, path or query) from request input. Request data goes in the JSON body only.
+
 ---
 
 ## Step 1 — Get access token

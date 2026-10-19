@@ -33,14 +33,21 @@ export function usePushNotifications() {
 
     const json = sub.toJSON()
     const api  = useApi()
-    await api('/push/subscribe', {
-      method: 'POST',
-      body: {
-        endpoint: json.endpoint,
-        p256dh:   json.keys?.p256dh,
-        auth:     json.keys?.auth,
-      },
-    })
+    try {
+      await api('/push/subscribe', {
+        method: 'POST',
+        body: {
+          endpoint: json.endpoint,
+          p256dh:   json.keys?.p256dh,
+          auth:     json.keys?.auth,
+        },
+      })
+    } catch {
+      // Backend refused it (e.g. a push service it doesn't accept). Drop the browser-side
+      // subscription so the browser doesn't hold one the backend never stored.
+      await sub.unsubscribe().catch(() => {})
+      return { success: false, reason: 'rejected' }
+    }
 
     return { success: true }
   }
