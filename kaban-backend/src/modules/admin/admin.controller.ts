@@ -1,6 +1,7 @@
 import {
   Controller, Get, Post, Patch, Body, Param, ParseUUIDPipe, Query, UseGuards,
 } from '@nestjs/common';
+import { ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { parsePagination } from '../../common/utils/pagination.util';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -26,6 +27,9 @@ export class AdminController {
   // ── Queue & Stats ──────────────────────────────────────────────────────────
 
   @Get('jobs')
+  @ApiQuery({ name: 'status', required: false })
+  @ApiQuery({ name: 'page',   required: false })
+  @ApiQuery({ name: 'size',   required: false, description: 'Default 50, max 100' })
   getQueue(
     @Query('status') status?: string,
     @Query('page')   page?: string,
@@ -43,6 +47,9 @@ export class AdminController {
   // ── Customers ──────────────────────────────────────────────────────────────
 
   @Get('customers')
+  @ApiQuery({ name: 'page',   required: false })
+  @ApiQuery({ name: 'size',   required: false, description: 'Default 24, max 100' })
+  @ApiQuery({ name: 'search', required: false })
   getCustomers(
     @Query('page')   page?: string,
     @Query('size')   size?: string,

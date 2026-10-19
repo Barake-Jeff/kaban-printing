@@ -14,7 +14,8 @@
     "db:migrate": "sequelize-cli db:migrate",
     "db:migrate:undo": "sequelize-cli db:migrate:undo",
     "db:migrate:status": "sequelize-cli db:migrate:status",
-    "migration:new": "sequelize-cli migration:generate --name"
+    "migration:new": "sequelize-cli migration:generate --name",
+    "openapi": "nest build && node dist/openapi/generate"
   },
   "dependencies": {
     "@nestjs/common": "^10.0.0",
@@ -25,6 +26,7 @@
     "@nestjs/platform-express": "^10.0.0",
     "@nestjs/schedule": "^4.1.2",
     "@nestjs/sequelize": "^10.0.0",
+    "@nestjs/swagger": "^7.4.2",
     "@nestjs/throttler": "^6.7.0",
     "@types/web-push": "^3.6.4",
     "axios": "^1.18.1",

@@ -3,6 +3,8 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
+import { SwaggerModule } from '@nestjs/swagger';
+import { buildOpenApiDocument } from './openapi/openapi';
 import { AppModule } from './app.module';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
@@ -30,6 +32,12 @@ async function bootstrap() {
   }
 
   app.setGlobalPrefix('api');
+
+  // Interactive API docs for development only: in production they would publish the full route
+  // map. The committed openapi.json (npm run openapi) documents the API either way.
+  if (config.get('NODE_ENV') !== 'production') {
+    SwaggerModule.setup('api/docs', app, buildOpenApiDocument(app));
+  }
 
   app.useGlobalPipes(new ValidationPipe({
     whitelist: true,

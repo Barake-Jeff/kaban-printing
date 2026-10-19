@@ -1,5 +1,6 @@
 import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { parsePagination } from '../../common/utils/pagination.util';
 import { OwnershipGuard } from '../../common/guards/ownership.guard';
@@ -22,6 +23,8 @@ export class JobsController {
   }
 
   @Get('my-jobs')
+  @ApiQuery({ name: 'page', required: false })
+  @ApiQuery({ name: 'size', required: false, description: 'Default 10, max 100' })
   getMyJobs(
     @CurrentUser() user: User,
     @Query('page') page?: string,

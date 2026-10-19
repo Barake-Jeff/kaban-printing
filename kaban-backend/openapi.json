@@ -1,0 +1,1710 @@
+{
+  "openapi": "3.0.0",
+  "paths": {
+    "/api/admin/auth/login": {
+      "post": {
+        "operationId": "AdminAuthController_adminLogin",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminLoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "AdminAuth"
+        ],
+        "security": [],
+        "description": "**Public**: no sign-in required."
+      }
+    },
+    "/api/admin/customers": {
+      "get": {
+        "operationId": "AdminController_getCustomers",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "required": false,
+            "in": "query",
+            "description": "Default 24, max 100",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/customers/{id}": {
+      "get": {
+        "operationId": "AdminController_getCustomer",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/customers/lookup": {
+      "get": {
+        "operationId": "AdminController_lookupCustomer",
+        "parameters": [
+          {
+            "name": "house",
+            "required": true,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/jobs": {
+      "get": {
+        "operationId": "AdminController_getQueue",
+        "parameters": [
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "required": false,
+            "in": "query",
+            "description": "Default 50, max 100",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/jobs/{id}/cancel": {
+      "patch": {
+        "operationId": "AdminController_cancelJob",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/jobs/{id}/file": {
+      "get": {
+        "operationId": "AdminController_getJobFile",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/jobs/{id}/notes": {
+      "patch": {
+        "operationId": "AdminController_saveNotes",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveNotesDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/jobs/{id}/payment": {
+      "patch": {
+        "operationId": "AdminController_markAsPaid",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/jobs/{id}/status": {
+      "patch": {
+        "operationId": "AdminController_updateStatus",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateJobStatusDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/password-reset-requests": {
+      "get": {
+        "operationId": "AdminController_getPasswordResetRequests",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      }
+    },
+    "/api/admin/password-reset-requests/{id}/dismiss": {
+      "patch": {
+        "operationId": "AdminController_dismissPasswordResetRequest",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      }
+    },
+    "/api/admin/reports": {
+      "get": {
+        "operationId": "AdminController_getReports",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      }
+    },
+    "/api/admin/settings": {
+      "get": {
+        "operationId": "AdminController_getSettings",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      },
+      "patch": {
+        "operationId": "AdminController_saveSettings",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSettingsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      }
+    },
+    "/api/admin/staff": {
+      "get": {
+        "operationId": "AdminController_getStaff",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      },
+      "post": {
+        "operationId": "AdminController_createStaff",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateStaffDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      }
+    },
+    "/api/admin/staff/{id}/deactivate": {
+      "patch": {
+        "operationId": "AdminController_deactivateStaff",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      }
+    },
+    "/api/admin/staff/{id}/reactivate": {
+      "patch": {
+        "operationId": "AdminController_reactivateStaff",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      }
+    },
+    "/api/admin/stats": {
+      "get": {
+        "operationId": "AdminController_getStats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "clerk",
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: clerk, admin."
+      }
+    },
+    "/api/admin/users/{id}/password": {
+      "patch": {
+        "operationId": "AdminController_setUserPassword",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetUserPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "x-roles": [
+          "admin"
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nRoles: admin."
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "operationId": "CustomerAuthController_forgotPassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "CustomerAuth"
+        ],
+        "security": [],
+        "description": "**Public**: no sign-in required."
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "operationId": "CustomerAuthController_login",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerLoginDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "CustomerAuth"
+        ],
+        "security": [],
+        "description": "**Public**: no sign-in required."
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "CustomerAuthController_logout",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "CustomerAuth"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "operationId": "CustomerAuthController_refresh",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "CustomerAuth"
+        ],
+        "security": [],
+        "description": "**Public**: no sign-in required."
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "operationId": "CustomerAuthController_register",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerRegisterDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "CustomerAuth"
+        ],
+        "security": [],
+        "description": "**Public**: no sign-in required."
+      }
+    },
+    "/api/files/{fileId}": {
+      "get": {
+        "operationId": "FilesController_getFileUrl",
+        "parameters": [
+          {
+            "name": "fileId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nOwner only (staff bypass)."
+      }
+    },
+    "/api/files/upload": {
+      "post": {
+        "operationId": "FilesController_uploadFile",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Files"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/jobs": {
+      "post": {
+        "operationId": "JobsController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateJobDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Jobs"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/jobs/{id}": {
+      "get": {
+        "operationId": "JobsController_getOne",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Jobs"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nOwner only (staff bypass)."
+      }
+    },
+    "/api/jobs/my-jobs": {
+      "get": {
+        "operationId": "JobsController_getMyJobs",
+        "parameters": [
+          {
+            "name": "page",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "required": false,
+            "in": "query",
+            "description": "Default 10, max 100",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Jobs"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/jobs/pricing": {
+      "get": {
+        "operationId": "JobsController_getPricing",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Jobs"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/notifications": {
+      "get": {
+        "operationId": "NotificationsController_getMyNotifications",
+        "parameters": [
+          {
+            "name": "limit",
+            "required": false,
+            "in": "query",
+            "description": "Default 30, max 100",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Notifications"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/payments/mpesa/callback/{token}": {
+      "post": {
+        "operationId": "PaymentsController_mpesaCallback",
+        "parameters": [],
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Payments"
+        ],
+        "security": [],
+        "description": "**Public**: no sign-in required.\n\nDaraja only: secret URL token + Safaricom source IPs."
+      }
+    },
+    "/api/payments/mpesa/initiate": {
+      "post": {
+        "operationId": "PaymentsController_initiateStk",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitiateMpesaDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/payments/status/{jobId}": {
+      "get": {
+        "operationId": "PaymentsController_getStatus",
+        "parameters": [
+          {
+            "name": "jobId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Payments"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token).\n\nOwner only (staff bypass)."
+      }
+    },
+    "/api/push/subscribe": {
+      "post": {
+        "operationId": "PushController_subscribe",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubscribeDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Push"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/push/unsubscribe": {
+      "delete": {
+        "operationId": "PushController_unsubscribe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Push"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/push/vapid-key": {
+      "get": {
+        "operationId": "PushController_getVapidKey",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Push"
+        ],
+        "security": [],
+        "description": "**Public**: no sign-in required."
+      }
+    },
+    "/api/users/me": {
+      "get": {
+        "operationId": "UsersController_getMe",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      },
+      "patch": {
+        "operationId": "UsersController_updateProfile",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/users/me/change-password": {
+      "post": {
+        "operationId": "UsersController_changePassword",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangePasswordDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    },
+    "/api/users/me/notifications": {
+      "patch": {
+        "operationId": "UsersController_updateNotifPrefs",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateNotifPrefsDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Users"
+        ],
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "description": "Requires a signed-in user (bearer access token)."
+      }
+    }
+  },
+  "info": {
+    "title": "PrintEase API",
+    "description": "Generated from the code — do not edit by hand (`npm run openapi`).\n\nSuccessful responses are wrapped by `TransformInterceptor` as `{ statusCode, message, data }`;\nerrors are `{ statusCode, message, errors? }`. Each operation lists the guards that protect it.",
+    "version": "0.1.0",
+    "contact": {}
+  },
+  "tags": [
+    {
+      "name": "Admin"
+    },
+    {
+      "name": "AdminAuth"
+    },
+    {
+      "name": "CustomerAuth"
+    },
+    {
+      "name": "Files"
+    },
+    {
+      "name": "Jobs"
+    },
+    {
+      "name": "Notifications"
+    },
+    {
+      "name": "Payments"
+    },
+    {
+      "name": "Push"
+    },
+    {
+      "name": "Users"
+    }
+  ],
+  "servers": [],
+  "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
+    "schemas": {
+      "AdminLoginDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "phone",
+          "password"
+        ]
+      },
+      "ChangePasswordDto": {
+        "type": "object",
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 100,
+            "pattern": "/(?=.*[A-Za-z])(?=.*\\d)/"
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
+      },
+      "CreateJobDto": {
+        "type": "object",
+        "properties": {
+          "fileId": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "instructions": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "pages": {
+            "type": "number",
+            "minimum": 1
+          },
+          "copies": {
+            "type": "number",
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "pageSelection": {
+            "type": "string",
+            "maxLength": 500
+          },
+          "colorMode": {
+            "type": "string",
+            "enum": [
+              "bw",
+              "color"
+            ]
+          },
+          "sides": {
+            "type": "string",
+            "enum": [
+              "single",
+              "double"
+            ]
+          },
+          "paperSize": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "deliveryType": {
+            "type": "string",
+            "enum": [
+              "pickup",
+              "delivery"
+            ]
+          },
+          "paymentMethod": {
+            "type": "string",
+            "enum": [
+              "mpesa",
+              "pay_on_pickup"
+            ]
+          }
+        },
+        "required": [
+          "pages",
+          "copies",
+          "colorMode",
+          "sides",
+          "paperSize",
+          "deliveryType",
+          "paymentMethod"
+        ]
+      },
+      "CreateStaffDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "/^(\\+254|0)[17]\\d{8}$/"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 100,
+            "pattern": "/(?=.*[A-Za-z])(?=.*\\d)/"
+          },
+          "role": {
+            "type": "object"
+          }
+        },
+        "required": [
+          "name",
+          "phone",
+          "password",
+          "role"
+        ]
+      },
+      "CustomerLoginDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "phone",
+          "password"
+        ]
+      },
+      "CustomerRegisterDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "/^(\\+254|0)[17]\\d{8}$/"
+          },
+          "houseNumber": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "estate": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 100,
+            "pattern": "/(?=.*[A-Za-z])(?=.*\\d)/"
+          }
+        },
+        "required": [
+          "name",
+          "phone",
+          "houseNumber",
+          "estate",
+          "password"
+        ]
+      },
+      "ForgotPasswordDto": {
+        "type": "object",
+        "properties": {
+          "phone": {
+            "type": "string",
+            "pattern": "/^(\\+254|0)[17]\\d{8}$/"
+          }
+        },
+        "required": [
+          "phone"
+        ]
+      },
+      "InitiateMpesaDto": {
+        "type": "object",
+        "properties": {
+          "jobId": {
+            "type": "string"
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "/^(\\+254|0)[17]\\d{8}$/"
+          }
+        },
+        "required": [
+          "jobId",
+          "phone"
+        ]
+      },
+      "PricingDto": {
+        "type": "object",
+        "properties": {
+          "bwPerPage": {
+            "type": "number",
+            "minimum": 0
+          },
+          "colorPerPage": {
+            "type": "number",
+            "minimum": 0
+          },
+          "doubleSidedMultiplier": {
+            "type": "number",
+            "minimum": 0
+          },
+          "deliveryFee": {
+            "type": "number",
+            "minimum": 0
+          }
+        },
+        "required": [
+          "bwPerPage",
+          "colorPerPage",
+          "doubleSidedMultiplier",
+          "deliveryFee"
+        ]
+      },
+      "RefreshTokenDto": {
+        "type": "object",
+        "properties": {
+          "refreshToken": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "refreshToken"
+        ]
+      },
+      "SaveNotesDto": {
+        "type": "object",
+        "properties": {
+          "notes": {
+            "type": "string",
+            "maxLength": 5000
+          }
+        },
+        "required": [
+          "notes"
+        ]
+      },
+      "SaveSettingsDto": {
+        "type": "object",
+        "properties": {
+          "business": {
+            "type": "object"
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/PricingDto"
+          },
+          "notificationMatrix": {
+            "type": "object"
+          }
+        }
+      },
+      "SetUserPasswordDto": {
+        "type": "object",
+        "properties": {
+          "newPassword": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 100,
+            "pattern": "/(?=.*[A-Za-z])(?=.*\\d)/"
+          }
+        },
+        "required": [
+          "newPassword"
+        ]
+      },
+      "SubscribeDto": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "maxLength": 2048
+          },
+          "p256dh": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "auth": {
+            "type": "string",
+            "maxLength": 255
+          }
+        },
+        "required": [
+          "endpoint",
+          "p256dh",
+          "auth"
+        ]
+      },
+      "UpdateJobStatusDto": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "printing",
+              "ready",
+              "delivered"
+            ]
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "UpdateNotifPrefsDto": {
+        "type": "object",
+        "properties": {
+          "notifSms": {
+            "type": "boolean"
+          },
+          "notifWhatsapp": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "notifSms",
+          "notifWhatsapp"
+        ]
+      },
+      "UpdateProfileDto": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255
+          },
+          "houseNumber": {
+            "type": "string",
+            "maxLength": 20
+          },
+          "estate": {
+            "type": "string",
+            "maxLength": 255
+          }
+        }
+      }
+    }
+  }
+}

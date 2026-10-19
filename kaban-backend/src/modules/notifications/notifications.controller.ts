@@ -1,4 +1,5 @@
 import { Controller, Get, Query, UseGuards } from '@nestjs/common';
+import { ApiQuery } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { parsePagination } from '../../common/utils/pagination.util';
@@ -11,6 +12,7 @@ export class NotificationsController {
   constructor(private readonly notificationsService: NotificationsService) {}
 
   @Get()
+  @ApiQuery({ name: 'limit', required: false, description: 'Default 30, max 100' })
   async getMyNotifications(
     @CurrentUser() user: User,
     @Query('limit') limit?: string,

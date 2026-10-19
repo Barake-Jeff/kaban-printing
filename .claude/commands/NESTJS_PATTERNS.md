@@ -47,6 +47,14 @@ export class JobsModule {}
 
 ---
 
+## API inventory (openapi.json)
+
+`kaban-backend/openapi.json` is the generated, committed list of every route, its auth, roles and request body (OWASP API9). **After adding or changing a route or DTO, run `npm run openapi` and commit the diff.** Reviewers see API changes there.
+
+- **Auth and roles** are read from `@UseGuards` / `@Roles` automatically. Don't hand-annotate them. A `@Roles` without `RolesGuard` is flagged as "NOT enforced".
+- **DTO bodies** are documented by the `@nestjs/swagger` CLI plugin (nest-cli.json) from the class-validator decorators. No `@ApiProperty` is needed.
+- **Optional `@Query()` params need `@ApiQuery({ name, required: false })`.** The plugin can't see the `?` on a method parameter and otherwise marks it required.
+
 ## Controller template
 
 Controllers ONLY: receive request, validate (via pipes), call service, return response.
@@ -306,41 +314,20 @@ app.useGlobalFilters(new GlobalExceptionFilter());
 
 ---
 
-## main.ts — always use this exactly
+## main.ts — what it must keep
 
-```typescript
-import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { AppModule } from './app.module';
-import { TransformInterceptor } from './common/interceptors/transform.interceptor';
-import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
+`kaban-backend/src/main.ts` is the source of truth; don't paste an older version over it. In order, it:
 
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  const config = app.get(ConfigService);
+1. Creates the app as `NestExpressApplication`, then applies `helmet()` (security headers, OWASP API8).
+2. Disables Express's auto-ETag (`app.set('etag', false)`): stale 304s across users otherwise.
+3. Sets `trust proxy` from `TRUST_PROXY` (hop count or addresses, never `true`), which rate limiting and the M-Pesa IP check rely on.
+4. `app.setGlobalPrefix('api')`.
+5. Serves Swagger UI at `/api/docs` **only when `NODE_ENV !== 'production'`** (`buildOpenApiDocument` in `src/openapi/openapi.ts`).
+6. Global `ValidationPipe` (`whitelist`, `forbidNonWhitelisted`, `transform`, implicit conversion), `TransformInterceptor`, `GlobalExceptionFilter`.
+7. CORS from the comma-separated `FRONTEND_URL`, with credentials.
+8. `app.listen(PORT ?? 3001)`.
 
-  app.setGlobalPrefix('api');
-
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    forbidNonWhitelisted: true,
-    transform: true,
-    transformOptions: { enableImplicitConversion: true },
-  }));
-
-  app.useGlobalInterceptors(new TransformInterceptor());
-  app.useGlobalFilters(new GlobalExceptionFilter());
-
-  app.enableCors({
-    origin: config.get('FRONTEND_URL'),
-    credentials: true,
-  });
-
-  await app.listen(config.get('PORT') ?? 3001);
-}
-bootstrap();
-```
+Required env vars are validated before any of this, in `ConfigModule.forRoot({ validate: validateEnv })` (`src/config/env.validation.ts`).
 
 ---
 

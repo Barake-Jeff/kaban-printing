@@ -1,4 +1,9 @@
 {
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // nest build wipes dist/ first (deleteOutDir), so an incremental cache left over from an
+    // earlier tsc run can make TypeScript skip emitting files it thinks are already there.
+    "incremental": false
+  },
   "exclude": ["node_modules", "test", "dist", "**/*spec.ts"]
 }
