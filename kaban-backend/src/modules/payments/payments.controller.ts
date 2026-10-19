@@ -5,6 +5,7 @@ import { OwnershipGuard } from '../../common/guards/ownership.guard';
 import { CheckOwnership } from '../../common/decorators/check-ownership.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { PaymentsService } from './payments.service';
+import { MpesaCallbackGuard } from './mpesa-callback.guard';
 import { InitiateMpesaDto } from './dto/initiate-mpesa.dto';
 import { Job } from '../jobs/models/job.model';
 import { User, UserRole } from '../users/models/user.model';
@@ -23,8 +24,14 @@ export class PaymentsController {
     return this.paymentsService.initiateStk(dto, user.id);
   }
 
-  // Public — Daraja posts here (no JWT guard)
-  @Post('mpesa/callback')
+  // Public — Daraja posts here (no JWT guard). The URL token and Safaricom's IPs are
+  // checked by MpesaCallbackGuard; the payload itself is checked in handleCallback.
+  // Unauthenticated callers are throttled per IP and Safaricom spreads callbacks over ~12
+  // addresses, so 30/min each is far above real volume. Don't go much lower: a throttled
+  // genuine callback is a lost payment confirmation.
+  @Post('mpesa/callback/:token')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  @UseGuards(MpesaCallbackGuard)
   async mpesaCallback(@Body() body: any) {
     try {
       await this.paymentsService.handleCallback(body);

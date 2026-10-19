@@ -48,7 +48,7 @@ export class PaymentsService {
     this.logger.log(`[M-Pesa STUB] STK Push → ${dto.phone} KES ${amount} (job ${job.id})`);
 
     // Auto-confirm after 5 seconds (stub behaviour)
-    setTimeout(() => this.simulateSuccess(checkoutReqId, Math.ceil(amount), dto.phone), 5000);
+    setTimeout(() => this.simulateSuccess(checkoutReqId, merchantReqId, Math.ceil(amount), dto.phone), 5000);
 
     return {
       checkoutRequestId: checkoutReqId,
@@ -58,12 +58,13 @@ export class PaymentsService {
     };
   }
 
-  private async simulateSuccess(checkoutReqId: string, amount: number, phone: string) {
+  private async simulateSuccess(checkoutReqId: string, merchantReqId: string, amount: number, phone: string) {
     try {
       const fakeReceipt = `QAB${Math.random().toString(36).toUpperCase().slice(2, 10)}`;
       await this.handleCallback({
         Body: {
           stkCallback: {
+            MerchantRequestID: merchantReqId,
             CheckoutRequestID: checkoutReqId,
             ResultCode:        0,
             ResultDesc:        'The service request is processed successfully.',
@@ -107,7 +108,17 @@ export class PaymentsService {
       return;
     }
 
-    if (payment.status !== PaymentRecordStatus.PENDING) return; // already processed
+    // Both IDs Daraja issued for this STK push must match. On a mismatch the payment is left
+    // pending rather than failed, so a forged callback can't close it and shut out the real one.
+    if (callback.MerchantRequestID !== payment.merchantReqId) {
+      this.logger.error(`M-Pesa callback ${CheckoutRequestID}: MerchantRequestID mismatch, ignored`);
+      return;
+    }
+
+    if (payment.status !== PaymentRecordStatus.PENDING) {
+      this.logger.log(`M-Pesa callback ${CheckoutRequestID}: already processed`);
+      return;
+    }
 
     if (resultCode !== 0) {
       const closed = await this.closePending(payment, {
@@ -115,7 +126,9 @@ export class PaymentsService {
         resultCode: String(ResultCode),
         resultDesc: String(ResultDesc ?? '').slice(0, 500),
       });
-      if (closed) await this.notify('payment_failed', payment);
+      if (!closed) return;
+      this.logger.log(`M-Pesa callback ${CheckoutRequestID}: failed (ResultCode ${ResultCode}, payment ${payment.id})`);
+      await this.notify('payment_failed', payment);
       return;
     }
 
@@ -152,6 +165,9 @@ export class PaymentsService {
       paidAt:       new Date(),
     });
     if (!closed) return; // a concurrent callback got there first
+    this.logger.log(
+      `M-Pesa callback ${CheckoutRequestID}: completed (payment ${payment.id}, job ${payment.jobId}, KES ${paid})`,
+    );
 
     await this.jobModel.update(
       { paymentStatus: PaymentStatus.PAID, mpesaRef },

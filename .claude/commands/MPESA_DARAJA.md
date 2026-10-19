@@ -20,7 +20,7 @@ Daraja sends a prompt to the customer's phone
         ↓
 Customer enters their M-Pesa PIN
         ↓
-Daraja sends a callback to POST /api/payments/mpesa/callback
+Daraja sends a callback to POST /api/payments/mpesa/callback/:token
         ↓
 Backend verifies callback, updates payment + job status
         ↓
@@ -38,9 +38,13 @@ MPESA_CONSUMER_KEY=your_consumer_key
 MPESA_CONSUMER_SECRET=your_consumer_secret
 MPESA_SHORTCODE=174379                          # sandbox shortcode
 MPESA_PASSKEY=bfb279f9aa9bdbcf158e97dd71a467cd2e0c893059b10f78e6b72ada1ed2c919  # sandbox passkey
-MPESA_CALLBACK_URL=https://your-url.ngrok.io/api/payments/mpesa/callback
+MPESA_CALLBACK_TOKEN=<64 hex chars>             # secret path segment, see Step 4
+MPESA_CALLBACK_URL=https://your-url.ngrok.io/api/payments/mpesa/callback/<MPESA_CALLBACK_TOKEN>
 MPESA_ENVIRONMENT=sandbox                        # sandbox | production
+MPESA_CALLBACK_IPS=                              # optional override of Safaricom's callback IPs
 ```
+
+`MPESA_CALLBACK_URL` must end with the same token as `MPESA_CALLBACK_TOKEN`, or every callback is refused with 403.
 
 **Sandbox base URLs:**
 - Auth: `https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials`
@@ -155,19 +159,14 @@ async initiateStk(jobId: string, phone: string, amount: number) {
 
 ## Step 4 — Handle the Daraja callback
 
-This endpoint receives the payment result from Safaricom. It MUST be public (no JWT guard).
-Safaricom sends a POST request to your `CallBackURL`.
+This endpoint receives the payment result from Safaricom. It has no JWT guard (Safaricom can't log in), so it is protected in layers instead. Never rely on any single one (OWASP API6, see `docs/SECURITY_PLAN.md`):
 
-```typescript
-// payments.controller.ts
-@Post('mpesa/callback')
-// NO @UseGuards() here — this must be publicly accessible
-async mpesaCallback(@Body() body: any) {
-  await this.paymentsService.handleCallback(body);
-  // Daraja expects this exact response, otherwise it will retry
-  return { ResultCode: 0, ResultDesc: 'Accepted' };
-}
-```
+1. **Secret URL token.** The route is `POST /api/payments/mpesa/callback/:token`, checked in constant time against `MPESA_CALLBACK_TOKEN` by `MpesaCallbackGuard` (`payments/mpesa-callback.guard.ts`).
+2. **IP allowlist.** The same guard only accepts Safaricom's published callback IPs (`SAFARICOM_CALLBACK_IPS`, overridable with `MPESA_CALLBACK_IPS`). It's skipped only when `MPESA_ENVIRONMENT=sandbox`. Behind a reverse proxy, `TRUST_PROXY` must be set or `req.ip` is the proxy and every callback is refused.
+3. **Payload validation.** `PaymentsService.handleCallback` only acts on a pending payment whose `CheckoutRequestID` **and** `MerchantRequestID` match what we stored. On success it requires a receipt number and `Amount >= payment.amount`, otherwise the payment is set to failed for staff to reconcile and the job stays unpaid.
+4. **Confirm with Daraja (required when the real integration lands).** Before marking a job paid, call the STK Push Query API (Step 5) for that `CheckoutRequestID` and only mark it paid if Daraja itself reports `ResultCode 0`. This is the one check that doesn't depend on the callback request at all. The same query also recovers payments whose callback was lost or refused (e.g. Safaricom started using a new IP).
+
+The controller always answers `{ ResultCode: 0, ResultDesc: 'Accepted' }` once the guard passes, even if processing throws (the error is logged). The exception filter redacts the token from logged URLs, but reverse-proxy access logs will still contain it, so keep those private.
 
 **Callback payload shape from Daraja:**
 
@@ -199,59 +198,17 @@ async mpesaCallback(@Body() body: any) {
 - `2001` = wrong PIN
 - Any non-zero = failure
 
-**Callback handler logic:**
+**Callback handler logic:** see `PaymentsService.handleCallback` in `kaban-backend/src/modules/payments/payments.service.ts`. It is the source of truth; don't copy an older version of it from here. Things it relies on:
 
-```typescript
-async handleCallback(body: any): Promise<void> {
-  const callback = body?.Body?.stkCallback;
-  if (!callback) return;
-
-  const { CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = callback;
-
-  // Find the payment by CheckoutRequestID
-  const payment = await this.paymentRepo.findOne({
-    where: { checkoutReqId: CheckoutRequestID },
-    relations: ['job'],
-  });
-  if (!payment) return;
-
-  if (ResultCode === 0) {
-    // Extract values from CallbackMetadata.Item array
-    const items = CallbackMetadata?.Item ?? [];
-    const getValue = (name: string) =>
-      items.find(i => i.Name === name)?.Value;
-
-    payment.mpesaRef    = getValue('MpesaReceiptNumber');
-    payment.mpesaReceipt = getValue('MpesaReceiptNumber');
-    payment.status      = 'completed';
-    payment.paidAt      = new Date();
-    await this.paymentRepo.save(payment);
-
-    // Update the job
-    await this.jobRepo.update(payment.jobId, {
-      paymentStatus: 'paid',
-      mpesaRef: payment.mpesaRef,
-      status: 'pending',   // now enters the print queue
-    });
-
-    // Trigger notification
-    await this.notificationsService.send(payment.jobId, 'payment_confirmed');
-  } else {
-    payment.status     = 'failed';
-    payment.resultCode = String(ResultCode);
-    payment.resultDesc = ResultDesc;
-    await this.paymentRepo.save(payment);
-  }
-}
-```
-
-The `CallbackMetadata.Item` is an array, not an object. Use `.find()` to extract values by `Name`. This is a very common mistake.
+- `CallbackMetadata.Item` is an array, not an object. Use `.find()` to extract values by `Name`, and check `Array.isArray` first.
+- `ResultCode` may arrive as a number or a string; it's compared as `Number(ResultCode)`.
+- A payment only leaves `pending` through a conditional update (`WHERE status = 'pending'`), so duplicate or concurrent callbacks are processed once.
 
 ---
 
-## Step 5 — STK Push query (optional polling fallback)
+## Step 5 — STK Push query (confirmation + polling fallback)
 
-If you want to check payment status without waiting for the callback (useful in dev with ngrok):
+Required at go-live to confirm each success callback with Daraja before marking a job paid (Step 4, layer 4), and to recover payments whose callback never arrived. Also useful in dev with ngrok:
 
 ```typescript
 async queryStk(checkoutRequestId: string) {
@@ -312,7 +269,7 @@ Daraja cannot call `localhost`. Use one of these during development:
 ```bash
 ngrok http 3000
 # Copy the https URL → set as MPESA_CALLBACK_URL in .env
-# e.g. https://abc123.ngrok.io/api/payments/mpesa/callback
+# e.g. https://abc123.ngrok.io/api/payments/mpesa/callback/<MPESA_CALLBACK_TOKEN>
 ```
 
 **Option 2 — Cloudflare Tunnel:**
@@ -335,12 +292,13 @@ The sandbox STK Push will NOT actually prompt a real phone. You must manually ca
 
 **Simulate callback with curl:**
 ```bash
-curl -X POST http://localhost:3000/api/payments/mpesa/callback \
+# Needs MPESA_ENVIRONMENT=sandbox (no IP check), the real token, and both IDs from the STK push response
+curl -X POST http://localhost:3001/api/payments/mpesa/callback/$MPESA_CALLBACK_TOKEN \
   -H "Content-Type: application/json" \
   -d '{
     "Body": {
       "stkCallback": {
-        "MerchantRequestID": "test-123",
+        "MerchantRequestID": "YOUR_MERCHANT_REQ_ID_HERE",
         "CheckoutRequestID": "YOUR_CHECKOUT_REQ_ID_HERE",
         "ResultCode": 0,
         "ResultDesc": "The service request is processed successfully.",
@@ -365,7 +323,7 @@ curl -X POST http://localhost:3000/api/payments/mpesa/callback \
 2. **Float amount** — Daraja rejects decimals, always use `Math.ceil(amount)`
 3. **Wrong timestamp format** — must be `YYYYMMDDHHmmss`, 14 digits, no separators
 4. **AccountReference too long** — max 12 characters, `PrintEase-1042` = 14 chars ❌, use `PE-1042` ✓
-5. **Callback not public** — never put `JwtAuthGuard` on the callback endpoint
+5. **Callback not public** — never put `JwtAuthGuard` on the callback endpoint (it's protected by `MpesaCallbackGuard` instead)
 6. **CallbackMetadata.Item is an array** — use `.find()`, not direct key access
 7. **Not saving CheckoutRequestID** — you cannot match the callback without it
 8. **Caching access token** — request a new token per session or cache with TTL < 1 hour

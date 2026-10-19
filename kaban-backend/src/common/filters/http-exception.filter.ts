@@ -37,7 +37,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   // Never log the request body — it can carry passwords or tokens.
   private log(status: number, request: any, exception: unknown) {
     const method = request?.method ?? 'UNKNOWN';
-    const url = request?.originalUrl ?? request?.url ?? 'unknown';
+    // The M-Pesa callback URL carries its shared secret as the last path segment.
+    const url = String(request?.originalUrl ?? request?.url ?? 'unknown')
+      .replace(/(\/mpesa\/+callback\/+)[^/?#]+/i, '$1[redacted]');
     const context = `${method} ${url} -> ${status}`;
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
