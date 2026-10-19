@@ -41,7 +41,8 @@ export class PaymentsController {
       await this.paymentsService.handleCallback(body);
     } catch (err) {
       // Still acknowledge: Daraja only needs the receipt, the failure is ours to investigate.
-      this.logger.error(`M-Pesa callback failed: ${err?.message}`, err?.stack);
+      const error = err instanceof Error ? err : new Error(String(err));
+      this.logger.error(`M-Pesa callback failed: ${error.message}`, error.stack);
     }
     return { ResultCode: 0, ResultDesc: 'Accepted' };
   }

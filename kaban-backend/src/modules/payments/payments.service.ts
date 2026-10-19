@@ -80,7 +80,7 @@ export class PaymentsService {
         },
       });
     } catch (err) {
-      this.logger.error(`simulateSuccess failed: ${err.message}`);
+      this.logger.error(`simulateSuccess failed: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
