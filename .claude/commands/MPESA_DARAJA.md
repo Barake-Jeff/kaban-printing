@@ -65,23 +65,59 @@ The Daraja host comes **only** from `MPESA_ENVIRONMENT` (OWASP API7, SSRF). Neve
 
 ---
 
-## Step 1 — Get access token
+## Rules for every Daraja call (OWASP API10)
 
-The access token expires in 1 hour. Cache it; do not request a new one for every payment.
+All outbound calls go through `kaban-backend/src/common/http/outbound-http.ts`. Never call `axios` directly:
+
+- **`createOutboundClient({ name: 'M-Pesa', baseURL })`:** 10 s timeout, no redirects, 1 MiB response cap, https only. Failures are logged without headers or bodies, and surface as `UpstreamError` (502/504, message names only the provider).
+- **`parseUpstream(Dto, response.data, 'M-Pesa')`:** validate every response against a DTO before using a field. Daraja is loose with types (`expires_in` arrives as `"3599"`), which implicit conversion handles. A missing field throws `UpstreamResponseError` (502).
+- **`withRetry(fn)`:** **only** for the token fetch and STK query. **Never retry an STK push**: a push that timed out may still have reached the customer's phone, and a retry would prompt them, and possibly charge them, twice.
 
 ```typescript
+// payments/daraja.client.ts (sketch)
+import { IsInt, IsString, IsNotEmpty } from 'class-validator';
+import { createOutboundClient, parseUpstream, withRetry } from '../../common/http/outbound-http';
+
+class TokenResponse   { @IsString() @IsNotEmpty() access_token: string; @IsInt() expires_in: number; }
+class StkPushResponse {
+  @IsString() @IsNotEmpty() MerchantRequestID: string;
+  @IsString() @IsNotEmpty() CheckoutRequestID: string;
+  @IsString() ResponseCode: string;             // '0' = accepted for processing
+  @IsString() CustomerMessage: string;
+}
+class StkQueryResponse {
+  @IsString() ResponseCode: string;
+  @IsString() ResultCode: string;               // '0' = paid
+  @IsString() ResultDesc: string;
+}
+
+private readonly http = createOutboundClient({ name: 'M-Pesa', baseURL: this.getMpesaBaseUrl() });
+```
+
+---
+
+## Step 1 — Get access token
+
+The token is valid for `expires_in` seconds (about 1 hour). **Cache it in memory** and refresh it a minute early. Don't fetch one per payment. This is the one call that is safe to retry.
+
+```typescript
+private token: { value: string; expiresAt: number } | null = null;
+
 async getAccessToken(): Promise<string> {
+  if (this.token && Date.now() < this.token.expiresAt) return this.token.value;
+
   const key    = this.config.get('MPESA_CONSUMER_KEY');
   const secret = this.config.get('MPESA_CONSUMER_SECRET');
   const credentials = Buffer.from(`${key}:${secret}`).toString('base64');
 
-  const baseUrl = this.getMpesaBaseUrl();
-  const response = await axios.get(
-    `${baseUrl}/oauth/v1/generate?grant_type=client_credentials`,
-    { headers: { Authorization: `Basic ${credentials}` } },
-  );
+  const res = await withRetry(() => this.http.get('/oauth/v1/generate', {
+    params:  { grant_type: 'client_credentials' },
+    headers: { Authorization: `Basic ${credentials}` },
+  }));
+  const body = parseUpstream(TokenResponse, res.data, 'M-Pesa');
 
-  return response.data.access_token;
+  this.token = { value: body.access_token, expiresAt: Date.now() + (body.expires_in - 60) * 1000 };
+  return this.token.value;
 }
 ```
 
@@ -90,64 +126,59 @@ async getAccessToken(): Promise<string> {
 ## Step 2 — Generate the password
 
 The password is a base64 string of: `Shortcode + Passkey + Timestamp`
-The timestamp format is: `YYYYMMDDHHmmss` (14 digits, no separators)
+The timestamp format is `YYYYMMDDHHmmss` (14 digits, no separators), in **Kenyan time (EAT, UTC+3)**. Don't use `toISOString()`, which is UTC.
 
 ```typescript
 generatePassword(): { password: string; timestamp: string } {
   const shortcode = this.config.get('MPESA_SHORTCODE');
   const passkey   = this.config.get('MPESA_PASSKEY');
+
+  // sv-SE formats as "2026-05-27 11:45:00"; strip separators -> "20260527114500"
   const timestamp = new Date()
-    .toISOString()
-    .replace(/[-T:.Z]/g, '')
-    .slice(0, 14);                           // → '20260527114500'
+    .toLocaleString('sv-SE', { timeZone: 'Africa/Nairobi' })
+    .replace(/\D/g, '');
 
-  const password = Buffer.from(`${shortcode}${passkey}${timestamp}`)
-    .toString('base64');
-
+  const password = Buffer.from(`${shortcode}${passkey}${timestamp}`).toString('base64');
   return { password, timestamp };
 }
 ```
 
-This is the most common mistake agents make — wrong timestamp format or wrong concatenation order.
+This is the most common mistake: a wrong timestamp format, the wrong time zone, or the wrong concatenation order. Confirm against the sandbox once.
 
 ---
 
 ## Step 3 — Send STK Push
 
+**Not retried** (see the rules above). If it fails or times out, record the payment as failed and let the customer try again from the UI. A push that timed out on our side may still arrive, so the STK query in Step 5 is what tells you the outcome.
+
 ```typescript
-async initiateStk(jobId: string, phone: string, amount: number) {
-  const token             = await this.getAccessToken();
+async initiateStk(job: Job, phone: string, amount: number) {
+  const token = await this.getAccessToken();
   const { password, timestamp } = this.generatePassword();
-  const shortcode         = this.config.get('MPESA_SHORTCODE');
-  const callbackUrl       = this.config.get('MPESA_CALLBACK_URL');
-  const baseUrl           = this.getMpesaBaseUrl();
+  const shortcode = this.config.get('MPESA_SHORTCODE');
 
   // Phone must be in format 2547XXXXXXXX (no + sign, no leading 0)
-  const formattedPhone = phone.replace(/^0/, '254').replace(/^\+/, '');
+  const formattedPhone = phone.replace(/^\+/, '').replace(/^0/, '254');
 
-  const payload = {
+  const res = await this.http.post('/mpesa/stkpush/v1/processrequest', {
     BusinessShortCode: shortcode,
     Password:          password,
     Timestamp:         timestamp,
     TransactionType:   'CustomerPayBillOnline',
-    Amount:            Math.ceil(amount),          // must be integer, round UP
+    Amount:            Math.ceil(amount),               // whole number, round UP
     PartyA:            formattedPhone,
     PartyB:            shortcode,
     PhoneNumber:       formattedPhone,
-    CallBackURL:       callbackUrl,
-    AccountReference:  `PrintEase-${jobId}`,       // max 12 chars
-    TransactionDesc:   'Print job payment',         // max 13 chars
-  };
+    CallBackURL:       this.config.get('MPESA_CALLBACK_URL'),  // ends in /<MPESA_CALLBACK_TOKEN>
+    AccountReference:  `PE-${job.id.slice(0, 8)}`,      // max 12 chars (a full UUID is 36)
+    TransactionDesc:   'Print job',                     // max 13 chars
+  }, { headers: { Authorization: `Bearer ${token}` } });
 
-  const response = await axios.post(
-    `${baseUrl}/mpesa/stkpush/v1/processrequest`,
-    payload,
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const body = parseUpstream(StkPushResponse, res.data, 'M-Pesa');
+  if (body.ResponseCode !== '0') throw new BadRequestException(body.CustomerMessage || 'M-Pesa declined the request');
 
-  // Save CheckoutRequestID to payments table — needed to match the callback
-  return response.data;
-  // response.data.CheckoutRequestID is the key field to save
+  // Save BOTH ids: the callback must match CheckoutRequestID and MerchantRequestID (Step 4).
+  return { checkoutRequestId: body.CheckoutRequestID, merchantRequestId: body.MerchantRequestID };
 }
 ```
 
@@ -210,28 +241,30 @@ The controller always answers `{ ResultCode: 0, ResultDesc: 'Accepted' }` once t
 
 ## Step 5 — STK Push query (confirmation + polling fallback)
 
-Required at go-live to confirm each success callback with Daraja before marking a job paid (Step 4, layer 4), and to recover payments whose callback never arrived. Also useful in dev with ngrok:
+Required at go-live:
+- **Confirmation:** confirm each success callback with Daraja before marking a job paid (Step 4, layer 4).
+- **Recovery:** recover payments whose callback never arrived, or was refused.
+
+The query is idempotent, so it is retried on transient failures.
 
 ```typescript
-async queryStk(checkoutRequestId: string) {
+async queryStk(checkoutRequestId: string): Promise<{ paid: boolean; resultCode: string; resultDesc: string }> {
   const token = await this.getAccessToken();
   const { password, timestamp } = this.generatePassword();
-  const baseUrl = this.getMpesaBaseUrl();
 
-  const response = await axios.post(
-    `${baseUrl}/mpesa/stkpushquery/v1/query`,
-    {
-      BusinessShortCode: this.config.get('MPESA_SHORTCODE'),
-      Password: password,
-      Timestamp: timestamp,
-      CheckoutRequestID: checkoutRequestId,
-    },
-    { headers: { Authorization: `Bearer ${token}` } },
-  );
+  const res = await withRetry(() => this.http.post('/mpesa/stkpushquery/v1/query', {
+    BusinessShortCode: this.config.get('MPESA_SHORTCODE'),
+    Password:          password,
+    Timestamp:         timestamp,
+    CheckoutRequestID: checkoutRequestId,
+  }, { headers: { Authorization: `Bearer ${token}` } }));
 
-  return response.data;
+  const body = parseUpstream(StkQueryResponse, res.data, 'M-Pesa');
+  return { paid: body.ResultCode === '0', resultCode: body.ResultCode, resultDesc: body.ResultDesc };
 }
 ```
+
+While a push is still waiting for the customer's PIN, Daraja answers the query with an HTTP error: an `UpstreamError` whose `upstreamBody` says the transaction "is being processed". Treat that as "still pending", not as failed. `withRetry` will retry it a few times if Daraja returns it as a 5xx, so for polling, call `queryStk` on a schedule rather than in a tight loop.
 
 ---
 
@@ -323,9 +356,10 @@ curl -X POST http://localhost:3001/api/payments/mpesa/callback/$MPESA_CALLBACK_T
 
 1. **Wrong phone format** — always strip `+` and replace leading `0` with `254`
 2. **Float amount** — Daraja rejects decimals, always use `Math.ceil(amount)`
-3. **Wrong timestamp format** — must be `YYYYMMDDHHmmss`, 14 digits, no separators
+3. **Wrong timestamp format** — must be `YYYYMMDDHHmmss`, 14 digits, no separators, in Africa/Nairobi time (not `toISOString()`, which is UTC)
 4. **AccountReference too long** — max 12 characters, `PrintEase-1042` = 14 chars ❌, use `PE-1042` ✓
 5. **Callback not public** — never put `JwtAuthGuard` on the callback endpoint (it's protected by `MpesaCallbackGuard` instead)
 6. **CallbackMetadata.Item is an array** — use `.find()`, not direct key access
-7. **Not saving CheckoutRequestID** — you cannot match the callback without it
+7. **Not saving CheckoutRequestID and MerchantRequestID** — the callback is matched on both
 8. **Caching access token** — request a new token per session or cache with TTL < 1 hour
+9. **Calling axios directly** — always use `createOutboundClient` / `parseUpstream` (timeouts, no redirects, validated responses), and never wrap an STK push in `withRetry`

@@ -1036,7 +1036,7 @@
         "operationId": "PaymentsController_mpesaCallback",
         "parameters": [],
         "responses": {
-          "201": {
+          "200": {
             "description": ""
           }
         },

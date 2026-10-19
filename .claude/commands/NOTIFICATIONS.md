@@ -225,21 +225,31 @@ const { isSupported, isGranted, requestAndSubscribe, unsubscribe } = usePushNoti
 
 ---
 
-## SMS — Africa's Talking
+## SMS (Africa's Talking) and WhatsApp: going live
 
-```bash
-npm install africastalking
-```
+Both are stubbed in `notifications.service.ts` (`sendSms` / `sendWhatsapp`, marked `TODO`). When replacing the stubs, follow the outbound rules (OWASP API10), the same as for Daraja (see `MPESA_DARAJA.md`, "Rules for every Daraja call"):
 
-Backend `.env`:
+- **Call the REST APIs through `createOutboundClient`** (`common/http/outbound-http.ts`): 10 s timeout, no redirects, response size cap, https only, and failures logged without headers or bodies.
+  - **Don't install the `africastalking` SDK.** It gives no control over timeouts, and these sends are awaited inside staff actions, like push.
+  - **Africa's Talking:** `POST https://api.africastalking.com/version1/messaging` (sandbox: `api.sandbox.africastalking.com`), form-encoded, `apiKey` header.
+  - **WhatsApp Cloud API:** `POST https://graph.facebook.com/<version>/<phone-number-id>/messages`, `Authorization: Bearer <WHATSAPP_TOKEN>`.
+  - **Base URLs come from config only.** Never from request input.
+- **Validate the provider's answer with `parseUpstream(Dto, res.data, 'SMS')`** before trusting it:
+  - Africa's Talking: `SMSMessageData.Recipients[0].status` must be `"Success"`.
+  - WhatsApp: a `messages[0].id` must be present.
+  - Log the notification as `sent` only then, otherwise `failed`. That's the same rule push already follows: the log must reflect what the provider actually accepted.
+- **Never retry a send** (`withRetry` is not for sends). A request that timed out may still have been delivered, and a retry texts the customer twice. Log `failed` and move on; the customer still sees the status in the app.
+- **A failed send must not fail the staff action that triggered it.** Keep the existing `try/catch` around each channel.
+
+Backend `.env` (already in `.env.example`):
 ```
 AT_USERNAME=sandbox   # use 'sandbox' for testing
 AT_API_KEY=<key from sandbox dashboard>
+WHATSAPP_API_URL=     # e.g. https://graph.facebook.com/v21.0/<phone-number-id>
+WHATSAPP_TOKEN=
 ```
 
-Phone formatting: Africa's Talking requires `+254XXXXXXXXX` format.
-
-The SMS integration is stubbed in `notifications.service.ts` with `TODO` comments. Activate by uncommenting the SDK call and installing `africastalking`.
+Phone formatting: Africa's Talking requires `+254XXXXXXXXX`; WhatsApp requires `254XXXXXXXXX` (no `+`).
 
 ---
 

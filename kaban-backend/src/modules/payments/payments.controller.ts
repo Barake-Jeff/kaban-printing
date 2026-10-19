@@ -1,4 +1,5 @@
-import { Controller, Post, Get, Param, Body, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, UseGuards, Logger, HttpCode } from '@nestjs/common';
+import { RawResponse } from '../../common/decorators/raw-response.decorator';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OwnershipGuard } from '../../common/guards/ownership.guard';
@@ -32,6 +33,9 @@ export class PaymentsController {
   @Post('mpesa/callback/:token')
   @Throttle({ default: { limit: 30, ttl: 60_000 } })
   @UseGuards(MpesaCallbackGuard)
+  // Daraja expects exactly 200 { ResultCode, ResultDesc }, not our usual wrapper.
+  @HttpCode(200)
+  @RawResponse()
   async mpesaCallback(@Body() body: any) {
     try {
       await this.paymentsService.handleCallback(body);
