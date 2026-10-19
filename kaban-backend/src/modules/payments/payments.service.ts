@@ -48,7 +48,7 @@ export class PaymentsService {
     this.logger.log(`[M-Pesa STUB] STK Push → ${dto.phone} KES ${amount} (job ${job.id})`);
 
     // Auto-confirm after 5 seconds (stub behaviour)
-    setTimeout(() => this.simulateSuccess(checkoutReqId, job.id, userId), 5000);
+    setTimeout(() => this.simulateSuccess(checkoutReqId, Math.ceil(amount), dto.phone), 5000);
 
     return {
       checkoutRequestId: checkoutReqId,
@@ -58,7 +58,7 @@ export class PaymentsService {
     };
   }
 
-  private async simulateSuccess(checkoutReqId: string, jobId: string, userId: string) {
+  private async simulateSuccess(checkoutReqId: string, amount: number, phone: string) {
     try {
       const fakeReceipt = `QAB${Math.random().toString(36).toUpperCase().slice(2, 10)}`;
       await this.handleCallback({
@@ -69,10 +69,10 @@ export class PaymentsService {
             ResultDesc:        'The service request is processed successfully.',
             CallbackMetadata: {
               Item: [
-                { Name: 'Amount',              Value: 0 },
+                { Name: 'Amount',              Value: amount },
                 { Name: 'MpesaReceiptNumber',  Value: fakeReceipt },
                 { Name: 'TransactionDate',     Value: Date.now() },
-                { Name: 'PhoneNumber',         Value: '' },
+                { Name: 'PhoneNumber',         Value: phone },
               ],
             },
           },
@@ -89,6 +89,18 @@ export class PaymentsService {
 
     const { CheckoutRequestID, ResultCode, ResultDesc, CallbackMetadata } = callback;
 
+    if (typeof CheckoutRequestID !== 'string' || !CheckoutRequestID) {
+      this.logger.warn('Callback without a CheckoutRequestID, ignored');
+      return;
+    }
+    // Daraja has been seen sending ResultCode both as a number and as a string.
+    const resultCode = Number(ResultCode);
+    const codeType = typeof ResultCode;
+    if ((codeType !== 'number' && codeType !== 'string') || ResultCode === '' || !Number.isFinite(resultCode)) {
+      this.logger.warn(`Callback with invalid ResultCode for ${CheckoutRequestID}, ignored`);
+      return;
+    }
+
     const payment = await this.paymentModel.findOne({ where: { checkoutReqId: CheckoutRequestID } });
     if (!payment) {
       this.logger.warn(`Callback for unknown checkoutReqId: ${CheckoutRequestID}`);
@@ -97,67 +109,84 @@ export class PaymentsService {
 
     if (payment.status !== PaymentRecordStatus.PENDING) return; // already processed
 
-    if (ResultCode === 0) {
-      const items    = CallbackMetadata?.Item ?? [];
-      const getValue = (name: string) => items.find((i: any) => i.Name === name)?.Value;
-      const mpesaRef = String(getValue('MpesaReceiptNumber') ?? '');
-
-      await payment.update({
-        status:       PaymentRecordStatus.COMPLETED,
-        mpesaRef,
-        mpesaReceipt: mpesaRef,
-        paidAt:       new Date(),
-      });
-
-      await this.jobModel.update(
-        { paymentStatus: PaymentStatus.PAID, mpesaRef },
-        { where: { id: payment.jobId } },
-      );
-
-      const job  = await this.jobModel.findOne({ where: { id: payment.jobId } });
-      const user = await this.userModel.findOne({ where: { id: payment.userId } });
-      if (job && user) {
-        try {
-          await this.notificationsService.send('payment_confirmed', {
-            jobId: job.id, userId: user.id,
-            user: {
-              name: user.name, phone: user.phone, houseNumber: user.houseNumber,
-              notifSms: user.notifSms, notifWhatsapp: user.notifWhatsapp,
-            },
-            job: {
-              fileName: job.fileName, pages: job.pages, copies: job.copies,
-              cost: Number(job.cost), deliveryFee: Number(job.deliveryFee),
-              deliveryType: job.deliveryType,
-            },
-          });
-        } catch { /* notification failure must not crash callback */ }
-      }
-    } else {
-      await payment.update({
+    if (resultCode !== 0) {
+      const closed = await this.closePending(payment, {
         status:     PaymentRecordStatus.FAILED,
         resultCode: String(ResultCode),
-        resultDesc: ResultDesc,
+        resultDesc: String(ResultDesc ?? '').slice(0, 500),
       });
-
-      const job  = await this.jobModel.findOne({ where: { id: payment.jobId } });
-      const user = await this.userModel.findOne({ where: { id: payment.userId } });
-      if (job && user) {
-        try {
-          await this.notificationsService.send('payment_failed', {
-            jobId: job.id, userId: user.id,
-            user: {
-              name: user.name, phone: user.phone, houseNumber: user.houseNumber,
-              notifSms: user.notifSms, notifWhatsapp: user.notifWhatsapp,
-            },
-            job: {
-              fileName: job.fileName, pages: job.pages, copies: job.copies,
-              cost: Number(job.cost), deliveryFee: Number(job.deliveryFee),
-              deliveryType: job.deliveryType,
-            },
-          });
-        } catch { /* notification failure must not crash callback */ }
-      }
+      if (closed) await this.notify('payment_failed', payment);
+      return;
     }
+
+    const items    = Array.isArray(CallbackMetadata?.Item) ? CallbackMetadata.Item : [];
+    const getValue = (name: string) => items.find((i: any) => i?.Name === name)?.Value;
+    const mpesaRef = String(getValue('MpesaReceiptNumber') ?? '').slice(0, 50);
+    const paid     = Number(getValue('Amount'));
+    const expected = Number(payment.amount);
+
+    // The STK push asks for Math.ceil(amount), so a genuine payment is never below the stored amount.
+    const problem =
+      !mpesaRef                                   ? 'Missing receipt number'
+      : !Number.isFinite(paid) || paid < expected ? `Amount mismatch: paid ${getValue('Amount')}, expected ${expected}`
+      : null;
+
+    if (problem) {
+      // Money may have been taken, so keep the receipt for staff to reconcile and don't tell
+      // the customer the payment failed. The job stays unpaid until staff mark it paid.
+      this.logger.error(`M-Pesa callback rejected for payment ${payment.id} (job ${payment.jobId}): ${problem}`);
+      await this.closePending(payment, {
+        status:       PaymentRecordStatus.FAILED,
+        resultCode:   String(ResultCode),
+        resultDesc:   problem,
+        mpesaRef:     mpesaRef || null,
+        mpesaReceipt: mpesaRef || null,
+      });
+      return;
+    }
+
+    const closed = await this.closePending(payment, {
+      status:       PaymentRecordStatus.COMPLETED,
+      mpesaRef,
+      mpesaReceipt: mpesaRef,
+      paidAt:       new Date(),
+    });
+    if (!closed) return; // a concurrent callback got there first
+
+    await this.jobModel.update(
+      { paymentStatus: PaymentStatus.PAID, mpesaRef },
+      { where: { id: payment.jobId } },
+    );
+
+    await this.notify('payment_confirmed', payment);
+  }
+
+  /** Moves a payment out of PENDING; false if another callback (or a cancel) already did. */
+  private async closePending(payment: Payment, values: Partial<Payment>) {
+    const [affected] = await this.paymentModel.update(values, {
+      where: { id: payment.id, status: PaymentRecordStatus.PENDING },
+    });
+    return affected === 1;
+  }
+
+  private async notify(type: 'payment_confirmed' | 'payment_failed', payment: Payment) {
+    const job  = await this.jobModel.findOne({ where: { id: payment.jobId } });
+    const user = await this.userModel.findOne({ where: { id: payment.userId } });
+    if (!job || !user) return;
+    try {
+      await this.notificationsService.send(type, {
+        jobId: job.id, userId: user.id,
+        user: {
+          name: user.name, phone: user.phone, houseNumber: user.houseNumber,
+          notifSms: user.notifSms, notifWhatsapp: user.notifWhatsapp,
+        },
+        job: {
+          fileName: job.fileName, pages: job.pages, copies: job.copies,
+          cost: Number(job.cost), deliveryFee: Number(job.deliveryFee),
+          deliveryType: job.deliveryType,
+        },
+      });
+    } catch { /* notification failure must not crash callback */ }
   }
 
   async getPaymentStatus(jobId: string, user: User) {

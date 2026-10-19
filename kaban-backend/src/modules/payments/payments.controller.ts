@@ -1,4 +1,4 @@
-import { Controller, Post, Get, Param, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Param, Body, UseGuards, Logger } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { OwnershipGuard } from '../../common/guards/ownership.guard';
@@ -11,6 +11,8 @@ import { User, UserRole } from '../users/models/user.model';
 
 @Controller('payments')
 export class PaymentsController {
+  private readonly logger = new Logger(PaymentsController.name);
+
   constructor(private readonly paymentsService: PaymentsService) {}
 
   // Each call pops an STK prompt on a phone, so keep it tight.
@@ -23,8 +25,13 @@ export class PaymentsController {
 
   // Public — Daraja posts here (no JWT guard)
   @Post('mpesa/callback')
-  mpesaCallback(@Body() body: any) {
-    this.paymentsService.handleCallback(body);
+  async mpesaCallback(@Body() body: any) {
+    try {
+      await this.paymentsService.handleCallback(body);
+    } catch (err) {
+      // Still acknowledge: Daraja only needs the receipt, the failure is ours to investigate.
+      this.logger.error(`M-Pesa callback failed: ${err?.message}`, err?.stack);
+    }
     return { ResultCode: 0, ResultDesc: 'Accepted' };
   }
 
